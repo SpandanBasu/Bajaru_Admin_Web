@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l \"C:\\\\Bajaru_Files\\\\bajaru-admin-web\\\\src\\\\components\\\\ui\"/*.tsx)",
+      "Bash(find src/components/ui -name \"*.tsx\" -exec wc -l {} +)",
+      "Bash(xargs wc:*)",
+      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(go get:*)",
+      "Bash(go build:*)",
+      "Bash(echo \"Exit code: $?\")"
+    ]
+  }
+}
