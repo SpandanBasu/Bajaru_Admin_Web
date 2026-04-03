@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { X, Plus, Trash2 } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { X, Plus, Trash2, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -56,6 +56,8 @@ interface ProductEditDialogProps {
   pendingImages: PendingImages | null;
   onImagesProcessed: (images: PendingImages) => void;
   onClearImages: () => void;
+  // New product mode: async check whether a typed ID is already taken
+  checkIdExists?: (id: string) => Promise<boolean>;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -74,6 +76,7 @@ export function ProductEditDialog({
   pendingImages,
   onImagesProcessed,
   onClearImages,
+  checkIdExists,
 }: ProductEditDialogProps) {
   const colorInputRef = useRef<HTMLInputElement>(null);
 
@@ -81,11 +84,41 @@ export function ProductEditDialog({
   const [newAttrKey, setNewAttrKey] = useState("");
   const [newAttrVal, setNewAttrVal] = useState("");
 
+  // Product ID validation (new product only)
+  type IdStatus = "idle" | "checking" | "available" | "taken" | "invalid";
+  const [idStatus, setIdStatus] = useState<IdStatus>("idle");
+  const idCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const validateIdFormat = (id: string) => /^[a-z0-9_]+$/.test(id);
+
+  const handleIdChange = useCallback(
+    (value: string) => {
+      updateField("id", value);
+      if (idCheckTimer.current) clearTimeout(idCheckTimer.current);
+
+      if (!value) { setIdStatus("idle"); return; }
+      if (!validateIdFormat(value)) { setIdStatus("invalid"); return; }
+      if (!checkIdExists) { setIdStatus("idle"); return; }
+
+      setIdStatus("checking");
+      idCheckTimer.current = setTimeout(async () => {
+        try {
+          const taken = await checkIdExists(value);
+          setIdStatus(taken ? "taken" : "available");
+        } catch {
+          setIdStatus("idle"); // network error — don't block the user
+        }
+      }, 600);
+    },
+    [checkIdExists, updateField],
+  );
+
   // Reset transient form state when dialog opens
   useEffect(() => {
     if (open) {
       setNewAttrKey("");
       setNewAttrVal("");
+      setIdStatus("idle");
     }
   }, [open]);
 
@@ -135,6 +168,53 @@ export function ProductEditDialog({
 
               {/* ── Basic Info ── */}
               <SectionDivider>Basic Info</SectionDivider>
+
+              {/* Product ID — new products only */}
+              {isNewProduct && (
+                <FormField label="Product ID">
+                  <div className="relative">
+                    <Input
+                      value={editingProduct.id}
+                      onChange={(e) => handleIdChange(e.target.value)}
+                      placeholder="e.g. veg_coriander_leaves"
+                      className="rounded-xl h-9 bg-secondary/50 focus-visible:bg-background pr-8 font-mono text-sm"
+                      spellCheck={false}
+                    />
+                    {/* Status indicator */}
+                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                      {idStatus === "checking" && (
+                        <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
+                      )}
+                      {idStatus === "available" && (
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                      )}
+                      {(idStatus === "taken" || idStatus === "invalid") && (
+                        <AlertCircle className="w-4 h-4 text-destructive" />
+                      )}
+                    </div>
+                  </div>
+                  {/* Helper / error text */}
+                  {idStatus === "invalid" && (
+                    <p className="text-xs text-destructive mt-1">
+                      Only lowercase letters, numbers and underscores allowed.
+                    </p>
+                  )}
+                  {idStatus === "taken" && (
+                    <p className="text-xs text-destructive mt-1">
+                      This ID is already in use. Choose a different one.
+                    </p>
+                  )}
+                  {idStatus === "available" && (
+                    <p className="text-xs text-green-600 mt-1">ID is available.</p>
+                  )}
+                  {idStatus === "idle" && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Leave blank to auto-generate. Use underscores: <span className="font-mono">type_name_variant</span>
+                    </p>
+                  )}
+                </FormField>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <FormField label="Name">
                   <Input
@@ -167,7 +247,9 @@ export function ProductEditDialog({
                 </div>
                 <div className="flex items-center gap-3">
                   <Switch id="active" checked={editingProduct.active} onCheckedChange={(v) => updateField("active", v)} />
-                  <Label htmlFor="active" className="text-sm font-medium">Active</Label>
+                  <Label htmlFor="active" className={`text-sm font-medium ${editingProduct.active ? "text-green-600" : "text-destructive"}`}>
+                    {editingProduct.active ? "In Stock" : "Out of Stock"}
+                  </Label>
                 </div>
               </div>
 

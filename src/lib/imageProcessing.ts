@@ -9,6 +9,24 @@ export interface ProcessedImages {
 }
 
 /**
+ * Compress a single image file to any square size.
+ * @param size    Output width/height in px (e.g. 200 or 800)
+ * @param whiteBg Fill with white before drawing (strips transparency — use for 800×800 detail)
+ * @param quality WebP quality 0–1 (1.0 = near-lossless, 0.8 = 80%)
+ */
+export async function processProductImageToSize(
+  file: File,
+  size: number,
+  whiteBg: boolean,
+  quality: number,
+): Promise<Blob> {
+  const bitmap = await createImageBitmap(file);
+  const canvas = drawSquareCanvas(bitmap, size, whiteBg);
+  bitmap.close();
+  return canvasToBlob(canvas, quality);
+}
+
+/**
  * Draw bitmap into a square canvas of `size` px, cropping to center (cover-fit).
  * Optionally fills with white first so RGBA images lose transparency correctly.
  */

@@ -5,14 +5,11 @@
 //   VITE_SUPABASE_URL      e.g. https://xyzxyz.supabase.co
 //   VITE_SUPABASE_ANON_KEY your project's anon/public key
 
+import type { ProcessedSlot } from "@/features/products/ImageProcessingPanel";
+
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? "";
 const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? "";
 const BUCKET = "product-images";
-
-export interface UploadedImageUrls {
-  detailUrl: string;
-  thumbnailUrl: string;
-}
 
 /** Converts a product name to a safe URL slug, e.g. "Green Apple" → "green-apple" */
 export function slugify(name: string): string {
@@ -29,7 +26,7 @@ async function uploadBlob(blob: Blob, storagePath: string): Promise<string> {
     headers: {
       Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
       "Content-Type": "image/webp",
-      "x-upsert": "true", // overwrite if same path already exists
+      "x-upsert": "true",
     },
     body: blob,
   });
@@ -39,31 +36,40 @@ async function uploadBlob(blob: Blob, storagePath: string): Promise<string> {
     throw new Error(`Supabase upload failed (${res.status}): ${text}`);
   }
 
-  // Return the public URL directly
   return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${storagePath}`;
 }
 
 /**
- * Upload both image variants to Supabase Storage.
+ * Upload all processed image slots to Supabase Storage.
  *
  * Paths:
- *   details/{category}/{slug}-detail.webp
- *   thumbnails/{category}/{slug}-thumbnail.webp
+ *   200×200 slots → thumbnails/{category}/{slug}-thumbnail-{n}.webp
+ *   800×800 slots → details/{category}/{slug}-detail-{n}.webp
+ *
+ * Returns public URLs in the same order as the input slots.
  */
 export async function uploadProductImages(
-  detail: Blob,
-  thumbnail: Blob,
+  slots: ProcessedSlot[],
   productName: string,
   category: string,
-): Promise<UploadedImageUrls> {
+): Promise<string[]> {
   const slug = slugify(productName);
-  const detailPath = `details/${category}/${slug}-detail.webp`;
-  const thumbPath = `thumbnails/${category}/${slug}-thumbnail.webp`;
 
-  const [detailUrl, thumbnailUrl] = await Promise.all([
-    uploadBlob(detail, detailPath),
-    uploadBlob(thumbnail, thumbPath),
-  ]);
+  // Track separate counters per size so each gets a unique filename
+  const sizeCounters: Record<number, number> = {};
 
-  return { detailUrl, thumbnailUrl };
+  const uploadTasks = slots.map((slot) => {
+    const n = sizeCounters[slot.size] ?? 0;
+    sizeCounters[slot.size] = n + 1;
+
+    const folder = slot.size === 200 ? "thumbnails" : "details";
+    const suffix = slot.size === 200 ? "thumbnail" : "detail";
+    // Use index suffix only when there is more than one of the same size
+    const indexSuffix = n > 0 ? `-${n}` : "";
+    const path = `${folder}/${category}/${slug}-${suffix}${indexSuffix}.webp`;
+
+    return uploadBlob(slot.blob, path);
+  });
+
+  return Promise.all(uploadTasks);
 }

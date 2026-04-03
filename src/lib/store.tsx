@@ -52,7 +52,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     avatarUrl: "",
   });
 
-  // Restore session on mount
+  // Restore session on mount — tokens live in localStorage via adminApi's tokenStore.
+  // If the refresh succeeds we are authenticated regardless of whether the user
+  // profile blob is in localStorage (it's display-only, not required for auth).
   useEffect(() => {
     tryRestoreSession().then((ok) => {
       if (ok) {
@@ -61,16 +63,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const user: AuthUserProfile | null = raw ? JSON.parse(raw) : null;
           if (user) {
             setAuthUser(user);
-            setRefreshTokenRef(""); // refreshToken is in tokenStore, not needed here
             setUserProfile({
               name: [user.firstName, user.lastName].filter(Boolean).join(" ") || "Admin",
               role: user.role ?? "Admin",
               avatarUrl: user.profilePictureUrl ?? "",
             });
           }
-          setIsAuthenticated(!!user);
+          // Tokens are valid — user IS authenticated even if the profile blob is absent
+          setIsAuthenticated(true);
         } catch {
-          setIsAuthenticated(false);
+          // Corrupted profile JSON — still authenticated, just missing display info
+          setIsAuthenticated(true);
         }
       }
       setIsRestoring(false);

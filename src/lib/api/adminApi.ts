@@ -37,9 +37,11 @@ let _tokens: TokenState | null = (() => {
 export function setTokens(state: TokenState) {
   _tokens = state;
   localStorage.setItem(TOKEN_KEY, JSON.stringify(state));
+  scheduleTokenRefresh(state.expiresAt); // keep session alive automatically
 }
 
 export function clearTokens() {
+  if (_refreshTimer) { clearTimeout(_refreshTimer); _refreshTimer = null; }
   _tokens = null;
   localStorage.removeItem(TOKEN_KEY);
 }
@@ -64,11 +66,30 @@ const adminApi: AxiosInstance = axios.create({
 // ── Refresh state ─────────────────────────────────────────────────────────────
 
 let _refreshPromise: Promise<boolean> | null = null;
+let _refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Called by sign-out / forced logout (clears local state, no API call needed if tokens gone). */
 export let onLogout: (() => void) | null = null;
 export function setLogoutHandler(fn: () => void) {
   onLogout = fn;
+}
+
+/**
+ * Schedule a background token refresh 3 minutes before the access token expires.
+ * This runs even when the user is completely idle — no API call needed to trigger it.
+ * Reschedules itself automatically after each successful refresh.
+ */
+export function scheduleTokenRefresh(expiresAt: number) {
+  if (_refreshTimer) clearTimeout(_refreshTimer);
+  const msUntilRefresh = Math.max(0, expiresAt - Date.now() - 3 * 60 * 1000);
+  _refreshTimer = setTimeout(async () => {
+    _refreshTimer = null;
+    const ok = await refreshOnce();
+    if (ok && _tokens) {
+      scheduleTokenRefresh(_tokens.expiresAt); // reschedule for the new token
+    }
+    // If refresh fails, the reactive 401 interceptor handles the next request
+  }, msUntilRefresh);
 }
 
 async function doRefresh(): Promise<boolean> {
@@ -177,10 +198,13 @@ export async function logout(refreshToken: string): Promise<void> {
  */
 export async function tryRestoreSession(): Promise<boolean> {
   if (!_tokens?.refreshToken) return false;
-  // Token still has more than 2 minutes left — no refresh needed
-  if (!isNearExpiry()) return true;
-  // Expired or near expiry — try refresh
-  const ok = await doRefresh();
+  if (!isNearExpiry()) {
+    // Token is still valid — start the background refresh timer
+    scheduleTokenRefresh(_tokens.expiresAt);
+    return true;
+  }
+  // Expired or near expiry — refresh immediately
+  const ok = await doRefresh(); // setTokens inside doRefresh will schedule the next timer
   if (!ok) clearTokens();
   return ok;
 }
@@ -242,6 +266,8 @@ export interface AdminProduct {
 }
 
 export interface CreateProductPayload {
+  /** Optional human-readable ID (e.g. "veg_coriander_leaves"). Auto-generated if omitted. */
+  id?: string;
   name: string;
   localName?: string;
   description?: string;
@@ -294,6 +320,27 @@ export async function getProductById(id: string, pincode: string): Promise<Produ
     { params: { pincode } },
   );
   return res.data.data;
+}
+
+/**
+ * Returns true if a product with the given ID already exists in the catalog.
+ * Uses the public product endpoint — a 404 means the ID is free; anything else means taken.
+ */
+export async function checkProductIdExists(id: string, pincode: string): Promise<boolean> {
+  try {
+    await getProductById(id, pincode);
+    return true; // product found → ID is taken
+  } catch (err: unknown) {
+    if (
+      err &&
+      typeof err === "object" &&
+      "response" in err &&
+      (err as { response?: { status?: number } }).response?.status === 404
+    ) {
+      return false; // 404 → ID is free
+    }
+    throw err; // network error or unexpected status — bubble up
+  }
 }
 
 export async function createProduct(payload: CreateProductPayload): Promise<AdminProduct> {

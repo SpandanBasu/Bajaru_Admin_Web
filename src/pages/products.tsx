@@ -14,6 +14,7 @@ import {
   getWarehouses,
   getInventoryByWarehouse,
   getProductById,
+  checkProductIdExists,
   createProduct,
   updateProduct,
   upsertInventory,
@@ -297,17 +298,16 @@ export default function Products() {
     if (editor.isNewProduct) {
       // Upload images to Supabase first so we have the public URLs for the catalog
       let imageUrls = p.imageUrls;
-      if (pendingImages) {
-        const { detailUrl, thumbnailUrl } = await uploadProductImages(
-          pendingImages.detail,
-          pendingImages.thumbnail,
+      if (pendingImages && pendingImages.slots.length > 0) {
+        imageUrls = await uploadProductImages(
+          pendingImages.slots,
           p.name,
           pendingImages.category,
         );
-        imageUrls = [detailUrl, thumbnailUrl];
       }
 
       const catalogPayload: CreateProductPayload = {
+        ...(p.id ? { id: p.id } : {}),
         name: p.name,
         localName: p.localName,
         description: p.description,
@@ -343,8 +343,7 @@ export default function Products() {
   const clearPendingImages = () => {
     if (pendingImages) {
       // Release object URLs to free browser memory
-      URL.revokeObjectURL(pendingImages.thumbnailPreview);
-      URL.revokeObjectURL(pendingImages.detailPreview);
+      pendingImages.slots.forEach((s) => URL.revokeObjectURL(s.preview));
     }
     setPendingImages(null);
   };
@@ -453,6 +452,10 @@ export default function Products() {
         pendingImages={pendingImages}
         onImagesProcessed={setPendingImages}
         onClearImages={clearPendingImages}
+        checkIdExists={async (id) => {
+          const pincode = selectedWarehouse?.servicePincodes?.[0] ?? "000000";
+          return checkProductIdExists(id, pincode);
+        }}
       />
 
       {/* Confirmation / diff dialog */}
