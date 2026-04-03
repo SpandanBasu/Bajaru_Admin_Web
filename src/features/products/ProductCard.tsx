@@ -53,7 +53,15 @@ export function ProductCard({ product, onEdit, animationIndex = 0 }: ProductCard
                 </span>
               )}
             </div>
-            <p className="text-primary font-bold text-xl">₹{product.price}</p>
+            {product.unitWeight && (
+              <p className="text-xs text-muted-foreground mb-1">{product.unitWeight}</p>
+            )}
+            <div className="flex items-baseline gap-2">
+              <p className="text-primary font-bold text-xl">₹{product.price}</p>
+              {product.mrp > product.price && (
+                <p className="text-muted-foreground line-through text-sm">₹{product.mrp}</p>
+              )}
+            </div>
             <div className="flex items-center gap-1 mt-1">
               <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
               <span className="text-xs text-muted-foreground">{product.rating} ({product.ratingCount})</span>

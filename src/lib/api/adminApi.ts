@@ -202,7 +202,22 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   return res.data.data;
 }
 
-// Products
+// Warehouses
+
+export interface Warehouse {
+  warehouseId: string;
+  displayName: string;
+  city: string;
+  servicePincodes: string[];
+  active: boolean;
+}
+
+export async function getWarehouses(): Promise<Warehouse[]> {
+  const res = await adminApi.get<ApiResponse<Warehouse[]>>("/admin/warehouses");
+  return res.data.data;
+}
+
+// Products — Catalog (MongoDB metadata via /market/admin/products)
 
 export interface AdminProduct {
   id: string;
@@ -214,57 +229,39 @@ export interface AdminProduct {
   isVeg: boolean;
   unitWeight: string;
   basePrice: number;
-  price: number;
   imageUrls: string[];
-  imageUrl: string;
   imageColorValue: number;
   tags: string[];
   searchTags: string[];
   rating: number;
   ratingCount: number;
-  attributes: Record<string, string>;
+  attributes: Record<string, unknown>;
   active: boolean;
-  stock: number;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface ProductFilter {
-  q?: string;
-  category?: string;
-  active?: boolean;
-  page?: number;
-  size?: number;
-}
-
-export async function getProducts(filter: ProductFilter = {}): Promise<PagedResult<AdminProduct>> {
-  const res = await adminApi.get<ApiResponse<PagedResult<AdminProduct>>>(
-    "/admin/inventory/products",
-    { params: { page: 0, size: 50, ...filter } },
-  );
-  return res.data.data;
 }
 
 export interface CreateProductPayload {
   name: string;
   localName?: string;
   description?: string;
-  type: string;
-  category: string;
-  isVeg: boolean;
-  unitWeight: string;
-  basePrice: number;
-  price: number;
+  type?: string;
+  category?: string;
+  isVeg?: boolean;
+  unitWeight?: string;
+  basePrice?: number;
   imageUrls?: string[];
   imageColorValue?: number;
   tags?: string[];
   searchTags?: string[];
-  attributes?: Record<string, string>;
+  attributes?: Record<string, unknown>;
+  rating?: number;
+  ratingCount?: number;
 }
 
 export async function createProduct(payload: CreateProductPayload): Promise<AdminProduct> {
   const res = await adminApi.post<ApiResponse<AdminProduct>>(
-    "/admin/inventory/products",
+    "/market/admin/products",
     payload,
   );
   return res.data.data;
@@ -275,14 +272,72 @@ export async function updateProduct(
   payload: Partial<CreateProductPayload>,
 ): Promise<AdminProduct> {
   const res = await adminApi.put<ApiResponse<AdminProduct>>(
-    `/admin/inventory/products/${id}`,
+    `/market/admin/products/${id}`,
     payload,
   );
   return res.data.data;
 }
 
-export async function toggleProductActive(id: string, active: boolean): Promise<void> {
-  await adminApi.patch(`/admin/inventory/products/${id}/active`, { active });
+export async function toggleProductActive(id: string): Promise<AdminProduct> {
+  const res = await adminApi.patch<ApiResponse<AdminProduct>>(
+    `/market/admin/products/${id}/toggle`,
+  );
+  return res.data.data;
+}
+
+// Products — Inventory (PostgreSQL stock + pricing per warehouse via /inventory/admin)
+
+export interface WarehouseInventoryItem {
+  productId: string;
+  name: string;
+  localName?: string;
+  category: string;
+  unitWeight: string;
+  imageUrls: string[];
+  active: boolean;
+  quantityAvailable: number;
+  mrp: number;
+  sellingPrice: number;
+  warehouseId: string;
+}
+
+interface AdminWarehousePage {
+  content: WarehouseInventoryItem[];
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+/** Fetches all inventory entries for a warehouse, following cursor pagination internally. */
+export async function getInventoryByWarehouse(warehouseId: string): Promise<WarehouseInventoryItem[]> {
+  const all: WarehouseInventoryItem[] = [];
+  let cursor: string | null = null;
+
+  do {
+    const params: Record<string, string | number> = { warehouseId, size: 200 };
+    if (cursor) params.cursor = cursor;
+
+    const res = await adminApi.get<ApiResponse<AdminWarehousePage>>(
+      "/inventory/admin/by-warehouse",
+      { params },
+    );
+    const page = res.data.data;
+    all.push(...page.content);
+    cursor = page.hasMore ? page.nextCursor : null;
+  } while (cursor);
+
+  return all;
+}
+
+export interface UpsertInventoryPayload {
+  productId: string;
+  warehouseId: string;
+  quantity: number;
+  mrp: number;
+  sellingPrice: number;
+}
+
+export async function upsertInventory(payload: UpsertInventoryPayload): Promise<void> {
+  await adminApi.post("/inventory/admin/upsert", payload);
 }
 
 // Procurement

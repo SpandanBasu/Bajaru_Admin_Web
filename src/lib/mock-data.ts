@@ -3,7 +3,7 @@ import type { Product, ProcurementItem } from "./types";
 export const INITIAL_PRODUCTS: Product[] = [
   {
     id: "1", name: "Fresh Tomatoes", localName: "", description: "Farm fresh red tomatoes, rich in vitamins.", type: "vegetable", category: "vegetable",
-    isVeg: true, unitWeight: "500 gm", basePrice: 40, price: 40, stock: 150,
+    isVeg: true, unitWeight: "500 gm", basePrice: 40, mrp: 40, price: 40, stock: 150,
     imageUrls: ["https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&h=500&fit=crop"],
     imageUrl: "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&h=500&fit=crop",
     imageColorValue: 4294198331, tags: ["fresh", "vitamin-c", "salad"], rating: 4.5, ratingCount: 210,
@@ -13,7 +13,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: "2", name: "Red Onions", localName: "", description: "Pungent red onions great for cooking.", type: "vegetable", category: "vegetable",
-    isVeg: true, unitWeight: "1 kg", basePrice: 35, price: 35, stock: 200,
+    isVeg: true, unitWeight: "1 kg", basePrice: 35, mrp: 35, price: 35, stock: 200,
     imageUrls: ["https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=500&h=500&fit=crop"],
     imageUrl: "https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=500&h=500&fit=crop",
     imageColorValue: 4288717988, tags: ["cooking", "essential"], rating: 4.2, ratingCount: 330,
@@ -23,7 +23,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: "3", name: "Potatoes", localName: "", description: "Versatile potatoes perfect for all Indian dishes.", type: "vegetable", category: "vegetable",
-    isVeg: true, unitWeight: "1 kg", basePrice: 25, price: 25, stock: 350,
+    isVeg: true, unitWeight: "1 kg", basePrice: 25, mrp: 25, price: 25, stock: 350,
     imageUrls: ["https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=500&h=500&fit=crop"],
     imageUrl: "https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=500&h=500&fit=crop",
     imageColorValue: 4291148622, tags: ["staple", "cooking"], rating: 4.3, ratingCount: 420,
@@ -33,7 +33,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: "4", name: "Bananas (Robusta)", localName: "", description: "Sweet and filling Robusta bananas.", type: "fruit", category: "fruit",
-    isVeg: true, unitWeight: "1 dozen", basePrice: 60, price: 60, stock: 80,
+    isVeg: true, unitWeight: "1 dozen", basePrice: 60, mrp: 60, price: 60, stock: 80,
     imageUrls: ["https://images.unsplash.com/photo-1603833665858-e61d17a86224?w=500&h=500&fit=crop"],
     imageUrl: "https://images.unsplash.com/photo-1603833665858-e61d17a86224?w=500&h=500&fit=crop",
     imageColorValue: 4294961920, tags: ["energy", "sweet"], rating: 4.4, ratingCount: 175,
@@ -43,7 +43,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: "5", name: "Fuji Apples", localName: "", description: "Crisp and sweet Fuji apples imported fresh.", type: "fruit", category: "fruit",
-    isVeg: true, unitWeight: "500 gm", basePrice: 120, price: 120, stock: 45,
+    isVeg: true, unitWeight: "500 gm", basePrice: 120, mrp: 120, price: 120, stock: 45,
     imageUrls: ["https://images.unsplash.com/photo-1560806887-1e4cd0b6fa6c?w=500&h=500&fit=crop"],
     imageUrl: "https://images.unsplash.com/photo-1560806887-1e4cd0b6fa6c?w=500&h=500&fit=crop",
     imageColorValue: 4294198331, tags: ["sweet", "crispy", "imported"], rating: 4.7, ratingCount: 98,
@@ -53,7 +53,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: "6", name: "Orange Carrots", localName: "", description: "Crunchy carrots rich in beta-carotene.", type: "vegetable", category: "vegetable",
-    isVeg: true, unitWeight: "500 gm", basePrice: 50, price: 50, stock: 90,
+    isVeg: true, unitWeight: "500 gm", basePrice: 50, mrp: 50, price: 50, stock: 90,
     imageUrls: ["https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=500&h=500&fit=crop"],
     imageUrl: "https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=500&h=500&fit=crop",
     imageColorValue: 4294940416, tags: ["healthy", "crunchy"], rating: 4.1, ratingCount: 145,
@@ -63,7 +63,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: "7", name: "Green Spinach", localName: "", description: "Fresh spinach leaves, rich in iron.", type: "vegetable", category: "leafy",
-    isVeg: true, unitWeight: "250 gm", basePrice: 20, price: 20, stock: 30,
+    isVeg: true, unitWeight: "250 gm", basePrice: 20, mrp: 20, price: 20, stock: 30,
     imageUrls: ["https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=500&h=500&fit=crop"],
     imageUrl: "https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=500&h=500&fit=crop",
     imageColorValue: 4279900192, tags: ["iron", "healthy", "leafy"], rating: 4.0, ratingCount: 88,
@@ -73,7 +73,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: "8", name: "Whole Milk 1L", localName: "", description: "Full-fat pasteurized whole milk.", type: "dairy", category: "dairy",
-    isVeg: true, unitWeight: "1 L", basePrice: 65, price: 65, stock: 120,
+    isVeg: true, unitWeight: "1 L", basePrice: 65, mrp: 65, price: 65, stock: 120,
     imageUrls: ["https://images.unsplash.com/photo-1563636619-e9143da7973b?w=500&h=500&fit=crop"],
     imageUrl: "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=500&h=500&fit=crop",
     imageColorValue: 4294967295, tags: ["dairy", "calcium", "fresh"], rating: 4.6, ratingCount: 260,

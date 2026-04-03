@@ -13,6 +13,7 @@ function blankProduct(): Product {
     isVeg: true,
     unitWeight: "",
     basePrice: 0,
+    mrp: 0,
     price: 0,
     stock: 0,
     imageUrls: [],

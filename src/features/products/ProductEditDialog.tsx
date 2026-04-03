@@ -118,16 +118,15 @@ export function ProductEditDialog({
           <ScrollArea className="max-h-[65vh]">
             <div className="px-6 pb-2 space-y-4">
 
-              {/* ── Product ID (new products only) ── */}
-              {isNewProduct && (
+              {/* ── Product ID (read-only when editing) ── */}
+              {!isNewProduct && (
                 <>
                   <SectionDivider>Product ID</SectionDivider>
-                  <FormField label="Product ID (_id)">
+                  <FormField label="Product ID">
                     <Input
                       value={editingProduct.id}
-                      onChange={(e) => updateField("id", e.target.value)}
-                      className="rounded-xl h-9 bg-secondary/50 focus-visible:bg-background font-mono"
-                      placeholder="e.g. veg_apple_green"
+                      readOnly
+                      className="rounded-xl h-9 bg-secondary/30 font-mono text-muted-foreground cursor-default"
                     />
                   </FormField>
                 </>
@@ -174,8 +173,17 @@ export function ProductEditDialog({
               {/* ── Pricing & Stock ── */}
               <SectionDivider>Pricing & Stock</SectionDivider>
               <div className="grid grid-cols-3 gap-3">
-                <FormField label="Base Price (₹)">
-                  <Input type="number" value={editingProduct.basePrice} onChange={(e) => updateField("basePrice", Number(e.target.value))} className="rounded-xl h-9 bg-secondary/50 focus-visible:bg-background" />
+                <FormField label="MRP (₹)">
+                  <Input
+                    type="number"
+                    value={editingProduct.mrp}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      updateField("mrp", val);
+                      updateField("basePrice", val);
+                    }}
+                    className="rounded-xl h-9 bg-secondary/50 focus-visible:bg-background"
+                  />
                 </FormField>
                 <FormField label="Selling Price (₹)">
                   <Input type="number" value={editingProduct.price} onChange={(e) => updateField("price", Number(e.target.value))} className="rounded-xl h-9 bg-secondary/50 focus-visible:bg-background" />

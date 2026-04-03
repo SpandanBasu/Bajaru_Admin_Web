@@ -19,6 +19,7 @@ export type Product = {
   isVeg: boolean;
   unitWeight: string;
   basePrice: number;
+  mrp: number;
   price: number;
   stock: number;
   imageUrls: string[];
