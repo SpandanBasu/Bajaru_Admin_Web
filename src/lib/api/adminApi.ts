@@ -259,9 +259,57 @@ export interface CreateProductPayload {
   ratingCount?: number;
 }
 
+/** Full catalog + live pricing detail for a single product (customer-facing DTO). */
+export interface ProductDetail {
+  id: string;
+  name: string;
+  localName: string;
+  description: string;
+  type: string;
+  category: string;
+  isVeg: boolean;
+  unitWeight: string;
+  basePrice: number;
+  oldPrice: number;       // MRP from inventory
+  newPrice: number;       // selling price from inventory
+  imageUrls: string[];
+  imageColorValue: number;
+  tags: string[];
+  rating: number;
+  ratingCount: number;
+  inStock: boolean;
+  stockQuantity: number;
+  attributes: Record<string, unknown>;
+  createdAt: string | null;
+}
+
+/**
+ * Fetch full catalog data for a single product.
+ * Uses the public market endpoint (pincode required for inventory join).
+ * Pincode should be any pincode served by the admin's selected warehouse.
+ */
+export async function getProductById(id: string, pincode: string): Promise<ProductDetail> {
+  const res = await adminApi.get<ApiResponse<ProductDetail>>(
+    `/market/products/${id}`,
+    { params: { pincode } },
+  );
+  return res.data.data;
+}
+
 export async function createProduct(payload: CreateProductPayload): Promise<AdminProduct> {
   const res = await adminApi.post<ApiResponse<AdminProduct>>(
     "/market/admin/products",
+    payload,
+  );
+  return res.data.data;
+}
+
+export async function updateProduct(
+  id: string,
+  payload: Partial<CreateProductPayload>,
+): Promise<AdminProduct> {
+  const res = await adminApi.put<ApiResponse<AdminProduct>>(
+    `/market/admin/products/${id}`,
     payload,
   );
   return res.data.data;

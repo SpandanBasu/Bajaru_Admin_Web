@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Plus, Trash2 } from "lucide-react";
+import { X, Plus, Trash2, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ interface ProductEditDialogProps {
   onOpenChange: (open: boolean) => void;
   editingProduct: Product | null;
   isNewProduct: boolean;
+  isCatalogLoading?: boolean;
   onSave: () => void;
   isSaving?: boolean;
   updateField: <K extends keyof Product>(key: K, value: Product[K]) => void;
@@ -59,6 +60,7 @@ export function ProductEditDialog({
   onOpenChange,
   editingProduct,
   isNewProduct,
+  isCatalogLoading = false,
   onSave,
   isSaving = false,
   updateField,
@@ -109,7 +111,7 @@ export function ProductEditDialog({
           <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent" />
           <div className="absolute bottom-3 left-6">
             <DialogTitle className="text-xl font-display">
-              {isNewProduct ? "New Product" : `Edit ${editingProduct?.name}`}
+              {isNewProduct ? "New Product" : `Edit — ${editingProduct?.name}`}
             </DialogTitle>
           </div>
         </div>
@@ -118,18 +120,18 @@ export function ProductEditDialog({
           <ScrollArea className="max-h-[65vh]">
             <div className="px-6 pb-2 space-y-4">
 
-              {/* ── Product ID (read-only when editing) ── */}
+              {/* ── Catalog-loading banner ── */}
               {!isNewProduct && (
-                <>
-                  <SectionDivider>Product ID</SectionDivider>
-                  <FormField label="Product ID">
-                    <Input
-                      value={editingProduct.id}
-                      readOnly
-                      className="rounded-xl h-9 bg-secondary/30 font-mono text-muted-foreground cursor-default"
-                    />
-                  </FormField>
-                </>
+                isCatalogLoading ? (
+                  <div className="mt-2 rounded-xl bg-muted/60 border border-border/50 px-4 py-3 text-xs text-muted-foreground flex items-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                    Fetching full product details from the database…
+                  </div>
+                ) : (
+                  <div className="mt-2 rounded-xl bg-primary/5 border border-primary/20 px-4 py-3 text-xs text-primary/80 leading-relaxed">
+                    All fields are pre-filled from the database. Only fields you change will be updated — everything else stays untouched.
+                  </div>
+                )
               )}
 
               {/* ── Basic Info ── */}
@@ -375,8 +377,8 @@ export function ProductEditDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)} className="rounded-xl">
               Cancel
             </Button>
-            <Button onClick={onSave} disabled={isSaving} className="rounded-xl shadow-lg shadow-primary/20">
-              {isSaving ? "Saving…" : isNewProduct ? "Add Product" : "Save Changes"}
+            <Button onClick={onSave} disabled={isSaving || isCatalogLoading} className="rounded-xl shadow-lg shadow-primary/20">
+              {isSaving ? "Saving…" : isCatalogLoading ? "Loading…" : isNewProduct ? "Add Product" : "Save Changes"}
             </Button>
           </DialogFooter>
         </div>

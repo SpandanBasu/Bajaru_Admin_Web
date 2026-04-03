@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Edit2, Package, Star } from "lucide-react";
+import { Edit2, Package, Star, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { Product } from "@/lib/types";
@@ -7,10 +7,12 @@ import type { Product } from "@/lib/types";
 interface ProductCardProps {
   product: Product;
   onEdit: (product: Product) => void;
+  loadingProductId?: string | null;
   animationIndex?: number;
 }
 
-export function ProductCard({ product, onEdit, animationIndex = 0 }: ProductCardProps) {
+export function ProductCard({ product, onEdit, loadingProductId, animationIndex = 0 }: ProductCardProps) {
+  const isLoadingThis = loadingProductId === product.id;
   const coverImage = product.imageUrls[0] ?? product.imageUrl;
 
   return (
@@ -72,9 +74,13 @@ export function ProductCard({ product, onEdit, animationIndex = 0 }: ProductCard
             variant="outline"
             className="w-full rounded-xl border-border hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors group/btn"
             onClick={() => onEdit(product)}
+            disabled={!!loadingProductId}
           >
-            <Edit2 className="w-4 h-4 mr-2 text-muted-foreground group-hover/btn:text-current" />
-            Edit Item
+            {isLoadingThis
+              ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              : <Edit2 className="w-4 h-4 mr-2 text-muted-foreground group-hover/btn:text-current" />
+            }
+            {isLoadingThis ? "Loading…" : "Edit Item"}
           </Button>
         </CardContent>
       </Card>

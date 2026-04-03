@@ -46,6 +46,11 @@ export function useProductEditor(_products: Product[], _setProducts: unknown) {
     setIsDialogOpen(true);
   };
 
+  /** Replace the entire editing product (e.g. after fetching full catalog data). */
+  const overrideEditingProduct = (product: Product) => {
+    setEditingProduct({ ...product });
+  };
+
   const handleNewProduct = () => {
     setEditingProduct(blankProduct());
     setIsNewProduct(true);
@@ -90,6 +95,7 @@ export function useProductEditor(_products: Product[], _setProducts: unknown) {
     setIsDialogOpen,
     handleEditClick,
     handleNewProduct,
+    overrideEditingProduct,
     updateField,
     updateAttribute,
     removeAttribute,
