@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Edit2, Package, Star, Loader2 } from "lucide-react";
+import { Edit2, Package, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { Product } from "@/lib/types";
@@ -63,10 +63,6 @@ export function ProductCard({ product, onEdit, loadingProductId, animationIndex 
               {product.mrp > product.price && (
                 <p className="text-muted-foreground line-through text-sm">₹{product.mrp}</p>
               )}
-            </div>
-            <div className="flex items-center gap-1 mt-1">
-              <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-              <span className="text-xs text-muted-foreground">{product.rating} ({product.ratingCount})</span>
             </div>
           </div>
 

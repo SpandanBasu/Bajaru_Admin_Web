@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Plus, Package, Warehouse as WarehouseIcon, Loader2 } from "lucide-react";
+import { Search, Plus, Package, Warehouse as WarehouseIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ProductCard } from "@/features/products/ProductCard";
 import { ProductEditDialog } from "@/features/products/ProductEditDialog";
+import { ChangeSummaryDialog } from "@/features/products/ChangeSummaryDialog";
 import { useProductEditor } from "@/features/products/useProductEditor";
 import {
   getWarehouses,
@@ -17,10 +18,18 @@ import {
   updateProduct,
   upsertInventory,
 } from "@/lib/api/adminApi";
+import { uploadProductImages } from "@/lib/supabaseStorage";
 import type { Product } from "@/lib/types";
-import type { WarehouseInventoryItem, CreateProductPayload, ProductDetail } from "@/lib/api/adminApi";
+import type {
+  WarehouseInventoryItem,
+  CreateProductPayload,
+  ProductDetail,
+  UpsertInventoryPayload,
+} from "@/lib/api/adminApi";
+import type { FieldChange } from "@/features/products/ChangeSummaryDialog";
+import type { PendingImages } from "@/features/products/ImageProcessingPanel";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Pure helpers ──────────────────────────────────────────────────────────────
 
 function toProduct(item: WarehouseInventoryItem): Product {
   return {
@@ -50,40 +59,39 @@ function toProduct(item: WarehouseInventoryItem): Product {
   };
 }
 
-/** Merge full catalog detail (fetched from backend) into the existing Product shape. */
-function mergeDetail(base: Product, detail: ProductDetail): Product {
+/** Overlay all real catalog fields onto the inventory-sourced product. */
+function mergeDetail(base: Product, d: ProductDetail): Product {
   return {
     ...base,
-    name: detail.name,
-    localName: detail.localName ?? "",
-    description: detail.description ?? "",
-    type: detail.type ?? "",
-    category: detail.category ?? base.category,
-    isVeg: detail.isVeg,
-    unitWeight: detail.unitWeight ?? base.unitWeight,
-    basePrice: detail.basePrice ?? base.basePrice,
-    imageUrls: detail.imageUrls?.length ? detail.imageUrls : base.imageUrls,
-    imageColorValue: detail.imageColorValue ?? base.imageColorValue,
-    tags: detail.tags ?? [],
-    rating: detail.rating ?? 0,
-    ratingCount: detail.ratingCount ?? 0,
-    attributes: detail.attributes && Object.keys(detail.attributes).length
-      ? (detail.attributes as Product["attributes"])
-      : base.attributes,
+    name: d.name ?? base.name,
+    localName: d.localName ?? base.localName,
+    description: d.description ?? "",
+    type: d.type ?? "",
+    category: d.category ?? base.category,
+    isVeg: d.isVeg ?? base.isVeg,
+    unitWeight: d.unitWeight ?? base.unitWeight,
+    basePrice: d.basePrice ?? base.basePrice,
+    imageUrls: d.imageUrls?.length ? d.imageUrls : base.imageUrls,
+    imageColorValue: d.imageColorValue ?? base.imageColorValue,
+    tags: d.tags ?? [],
+    rating: d.rating ?? 0,
+    ratingCount: d.ratingCount ?? 0,
+    attributes:
+      d.attributes && Object.keys(d.attributes).length
+        ? (d.attributes as Product["attributes"])
+        : base.attributes,
   };
 }
 
 /**
- * Build a partial catalog update payload containing ONLY fields that changed.
- * Fields that are identical to the original are omitted entirely — the backend
- * treats missing JSON keys as "no change" (pointer fields stay nil in Go).
+ * Compare current vs original and return only the fields that changed.
+ * Omitted keys → backend leaves those fields untouched (pointer types stay nil).
  */
-function buildDiff(
+function buildCatalogDiff(
   current: Product,
   original: Product,
 ): Partial<CreateProductPayload> {
   const diff: Partial<CreateProductPayload> = {};
-
   if (current.name !== original.name) diff.name = current.name;
   if (current.localName !== original.localName) diff.localName = current.localName;
   if (current.description !== original.description) diff.description = current.description;
@@ -95,18 +103,74 @@ function buildDiff(
   if (current.imageColorValue !== original.imageColorValue) diff.imageColorValue = current.imageColorValue;
   if (current.rating !== original.rating) diff.rating = current.rating;
   if (current.ratingCount !== original.ratingCount) diff.ratingCount = current.ratingCount;
-
-  // Arrays / objects — compare by serialisation
-  if (JSON.stringify(current.imageUrls) !== JSON.stringify(original.imageUrls))
-    diff.imageUrls = current.imageUrls;
-  if (JSON.stringify(current.tags) !== JSON.stringify(original.tags))
-    diff.tags = current.tags;
-  if (JSON.stringify(current.searchTags) !== JSON.stringify(original.searchTags))
-    diff.searchTags = current.searchTags;
-  if (JSON.stringify(current.attributes) !== JSON.stringify(original.attributes))
-    diff.attributes = current.attributes;
-
+  if (JSON.stringify(current.imageUrls) !== JSON.stringify(original.imageUrls)) diff.imageUrls = current.imageUrls;
+  if (JSON.stringify(current.tags) !== JSON.stringify(original.tags)) diff.tags = current.tags;
+  if (JSON.stringify(current.searchTags) !== JSON.stringify(original.searchTags)) diff.searchTags = current.searchTags;
+  if (JSON.stringify(current.attributes) !== JSON.stringify(original.attributes)) diff.attributes = current.attributes;
   return diff;
+}
+
+// Human-readable label for each diffable key
+const FIELD_LABELS: Record<string, string> = {
+  name: "Name",
+  localName: "Local Name",
+  description: "Description",
+  type: "Type",
+  category: "Category",
+  isVeg: "Vegetarian",
+  unitWeight: "Unit Weight",
+  basePrice: "Base Price (₹)",
+  imageColorValue: "Image Color",
+  rating: "Rating",
+  ratingCount: "Rating Count",
+  imageUrls: "Images",
+  tags: "Tags",
+  searchTags: "Search Tags",
+  attributes: "Attributes",
+};
+
+function fmt(val: unknown): string {
+  if (val === null || val === undefined || val === "") return "(empty)";
+  if (typeof val === "boolean") return val ? "Yes" : "No";
+  if (Array.isArray(val)) return val.length ? val.join(", ") : "(none)";
+  if (typeof val === "object") {
+    const entries = Object.entries(val as Record<string, unknown>)
+      .filter(([, v]) => v !== "")
+      .map(([k, v]) => `${k}: ${v}`);
+    return entries.length ? entries.join(" · ") : "(empty)";
+  }
+  return String(val);
+}
+
+function toCatalogChanges(
+  diff: Partial<CreateProductPayload>,
+  original: Product,
+): FieldChange[] {
+  return Object.entries(diff).map(([key, newVal]) => ({
+    label: FIELD_LABELS[key] ?? key,
+    oldValue: fmt(original[key as keyof Product]),
+    newValue: fmt(newVal),
+  }));
+}
+
+function toInventoryChanges(current: Product, original: Product): FieldChange[] {
+  const changes: FieldChange[] = [];
+  if (current.mrp !== original.mrp)
+    changes.push({ label: "MRP (₹)", oldValue: fmt(original.mrp), newValue: fmt(current.mrp) });
+  if (current.price !== original.price)
+    changes.push({ label: "Selling Price (₹)", oldValue: fmt(original.price), newValue: fmt(current.price) });
+  if (current.stock !== original.stock)
+    changes.push({ label: "Stock Qty", oldValue: fmt(original.stock), newValue: fmt(current.stock) });
+  return changes;
+}
+
+// ─── Pending confirmation shape ───────────────────────────────────────────────
+
+interface PendingConfirm {
+  catalogDiff: Partial<CreateProductPayload>;
+  inventoryPayload: UpsertInventoryPayload;
+  catalogChanges: FieldChange[];
+  inventoryChanges: FieldChange[];
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -116,19 +180,24 @@ export default function Products() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
 
-  // Tracks which product's Edit button is currently loading its catalog data
+  // Tracks which product's Edit button is spinning while we fetch catalog data
   const [loadingProductId, setLoadingProductId] = useState<string | null>(null);
 
-  // The version of the product as fetched from the backend (used for diffing on save)
+  // The exact product state we fetched from the backend (baseline for diffing)
   const [originalProduct, setOriginalProduct] = useState<Product | null>(null);
 
-  // Fetch warehouses
+  // When non-null, the confirmation dialog is visible
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+
+  // Processed image blobs for new product creation (held until confirmed save)
+  const [pendingImages, setPendingImages] = useState<PendingImages | null>(null);
+
+  // ── Warehouses ──
   const { data: warehouses = [] } = useQuery({
     queryKey: ["warehouses"],
     queryFn: getWarehouses,
   });
 
-  // Auto-select first warehouse
   useEffect(() => {
     if (warehouses.length > 0 && !selectedWarehouseId) {
       setSelectedWarehouseId(warehouses[0].warehouseId);
@@ -137,7 +206,7 @@ export default function Products() {
 
   const selectedWarehouse = warehouses.find((w) => w.warehouseId === selectedWarehouseId);
 
-  // Fetch inventory (products + real pricing) for selected warehouse
+  // ── Inventory list ──
   const { data: inventoryItems = [], isLoading } = useQuery({
     queryKey: ["inventory", selectedWarehouseId],
     queryFn: () => getInventoryByWarehouse(selectedWarehouseId),
@@ -146,10 +215,10 @@ export default function Products() {
 
   const products: Product[] = inventoryItems.map(toProduct);
   const filteredProducts = products.filter((p) =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+    p.name.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
-  // Mutations
+  // ── Mutations ──
   const createMutation = useMutation({ mutationFn: createProduct });
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: Partial<CreateProductPayload> }) =>
@@ -159,44 +228,86 @@ export default function Products() {
 
   const editor = useProductEditor(products, () => {});
 
-  // ── Edit click: open dialog immediately with inventory data, then fetch full catalog ──
+  // ── Edit click: fetch full catalog data FIRST, then open the dialog ──
 
   const handleEditClick = async (product: Product) => {
-    editor.handleEditClick(product);       // open dialog with partial data right away
-    setOriginalProduct(null);              // clear any stale original
     setLoadingProductId(product.id);
+    setOriginalProduct(null);
 
     const pincode = selectedWarehouse?.servicePincodes?.[0];
-    if (!pincode) {
-      setLoadingProductId(null);
-      return;
+    let fullProduct = product; // fallback if fetch fails
+
+    if (pincode) {
+      try {
+        const detail = await getProductById(product.id, pincode);
+        fullProduct = mergeDetail(product, detail);
+      } catch {
+        // Catalog fetch failed (e.g. product inactive or network error).
+        // Open the dialog with the inventory data we already have.
+        fullProduct = product;
+      }
     }
 
-    try {
-      const detail = await getProductById(product.id, pincode);
-      const full = mergeDetail(product, detail);
-      editor.overrideEditingProduct(full);  // replace form fields with real catalog data
-      setOriginalProduct(full);             // remember the original for diffing
-    } catch {
-      // Fetch failed (e.g. product inactive or network error).
-      // The dialog is already open with inventory data — warn but don't block.
-      setOriginalProduct(product);
-    } finally {
-      setLoadingProductId(null);
-    }
+    setOriginalProduct(fullProduct);
+    editor.handleEditClick(fullProduct); // opens dialog with all real fields
+    setLoadingProductId(null);
   };
 
-  // ── Save: diff-only catalog update + inventory upsert ──
+  // ── "Review Changes" clicked inside dialog: compute diff and show confirmation ──
 
-  const handleSave = async () => {
+  const handleReviewChanges = () => {
     const p = editor.editingProduct;
     if (!p || !selectedWarehouseId) return;
 
-    let productId = p.id;
+    const inventoryPayload: UpsertInventoryPayload = {
+      productId: p.id,
+      warehouseId: selectedWarehouseId,
+      quantity: p.stock,
+      mrp: p.mrp,
+      sellingPrice: p.price,
+    };
 
     if (editor.isNewProduct) {
-      // Create full catalog entry, then set initial inventory
-      const catalogPayload: Partial<CreateProductPayload> = {
+      // No diff for new products — just confirm creation
+      setPendingConfirm({
+        catalogDiff: {},
+        inventoryPayload,
+        catalogChanges: [],
+        inventoryChanges: [],
+      });
+      return;
+    }
+
+    const base = originalProduct ?? p;
+    const catalogDiff = buildCatalogDiff(p, base);
+    const catalogChanges = toCatalogChanges(catalogDiff, base);
+    const inventoryChanges = toInventoryChanges(p, base);
+
+    setPendingConfirm({ catalogDiff, inventoryPayload, catalogChanges, inventoryChanges });
+  };
+
+  // ── Confirmed save: fire the actual API calls ──
+
+  const handleConfirmedSave = async () => {
+    const p = editor.editingProduct;
+    if (!p || !selectedWarehouseId || !pendingConfirm) return;
+
+    const { catalogDiff, inventoryPayload } = pendingConfirm;
+
+    if (editor.isNewProduct) {
+      // Upload images to Supabase first so we have the public URLs for the catalog
+      let imageUrls = p.imageUrls;
+      if (pendingImages) {
+        const { detailUrl, thumbnailUrl } = await uploadProductImages(
+          pendingImages.detail,
+          pendingImages.thumbnail,
+          p.name,
+          pendingImages.category,
+        );
+        imageUrls = [detailUrl, thumbnailUrl];
+      }
+
+      const catalogPayload: CreateProductPayload = {
         name: p.name,
         localName: p.localName,
         description: p.description,
@@ -205,7 +316,7 @@ export default function Products() {
         isVeg: p.isVeg,
         unitWeight: p.unitWeight,
         basePrice: p.basePrice,
-        imageUrls: p.imageUrls,
+        imageUrls,
         imageColorValue: p.imageColorValue,
         tags: p.tags,
         searchTags: p.searchTags,
@@ -213,27 +324,29 @@ export default function Products() {
         rating: p.rating,
         ratingCount: p.ratingCount,
       };
-      const created = await createMutation.mutateAsync(catalogPayload as CreateProductPayload);
-      productId = created.id;
-    } else if (originalProduct) {
-      // Existing product: only send fields that actually changed
-      const diff = buildDiff(p, originalProduct);
-      if (Object.keys(diff).length > 0) {
-        await updateMutation.mutateAsync({ id: p.id, payload: diff });
+      const created = await createMutation.mutateAsync(catalogPayload);
+      // upsert inventory using the real id the backend assigned
+      await upsertMutation.mutateAsync({ ...inventoryPayload, productId: created.id });
+    } else {
+      if (Object.keys(catalogDiff).length > 0) {
+        await updateMutation.mutateAsync({ id: p.id, payload: catalogDiff });
       }
+      await upsertMutation.mutateAsync(inventoryPayload);
     }
 
-    // Always upsert inventory (stock + pricing) — these are always from real data
-    await upsertMutation.mutateAsync({
-      productId,
-      warehouseId: selectedWarehouseId,
-      quantity: p.stock,
-      mrp: p.mrp,
-      sellingPrice: p.price,
-    });
-
     await queryClient.invalidateQueries({ queryKey: ["inventory", selectedWarehouseId] });
+    setPendingConfirm(null);
+    clearPendingImages();
     editor.setIsDialogOpen(false);
+  };
+
+  const clearPendingImages = () => {
+    if (pendingImages) {
+      // Release object URLs to free browser memory
+      URL.revokeObjectURL(pendingImages.thumbnailPreview);
+      URL.revokeObjectURL(pendingImages.detailPreview);
+    }
+    setPendingImages(null);
   };
 
   const isSaving =
@@ -322,20 +435,39 @@ export default function Products() {
         />
       )}
 
+      {/* Edit / New product dialog */}
       <ProductEditDialog
         open={editor.isDialogOpen}
-        onOpenChange={editor.setIsDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) clearPendingImages();
+          editor.setIsDialogOpen(open);
+        }}
         editingProduct={editor.editingProduct}
         isNewProduct={editor.isNewProduct}
-        isCatalogLoading={loadingProductId !== null}
-        onSave={handleSave}
-        isSaving={isSaving}
+        onSave={handleReviewChanges}
         updateField={editor.updateField}
         updateAttribute={editor.updateAttribute}
         removeAttribute={editor.removeAttribute}
         onImagesUploaded={editor.handleUploadedImages}
         onRemoveImage={editor.removeImage}
+        pendingImages={pendingImages}
+        onImagesProcessed={setPendingImages}
+        onClearImages={clearPendingImages}
       />
+
+      {/* Confirmation / diff dialog */}
+      {pendingConfirm && editor.editingProduct && (
+        <ChangeSummaryDialog
+          open={!!pendingConfirm}
+          onConfirm={handleConfirmedSave}
+          onBack={() => setPendingConfirm(null)}
+          isSaving={isSaving}
+          productName={editor.editingProduct.name}
+          isNewProduct={editor.isNewProduct}
+          catalogChanges={pendingConfirm.catalogChanges}
+          inventoryChanges={pendingConfirm.inventoryChanges}
+        />
+      )}
     </div>
   );
 }

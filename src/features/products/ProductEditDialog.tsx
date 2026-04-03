@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Plus, Trash2, Loader2 } from "lucide-react";
+import { X, Plus, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,8 @@ import { FormField } from "@/components/shared/FormField";
 import { SectionDivider } from "@/components/shared/SectionDivider";
 import { ImageUploadZone } from "@/components/shared/ImageUploadZone";
 import { TagInput } from "@/components/shared/TagInput";
+import { ImageProcessingPanel } from "./ImageProcessingPanel";
+import type { PendingImages } from "./ImageProcessingPanel";
 import { FIXED_ATTR_KEYS } from "./useProductEditor";
 import type { Product } from "@/lib/types";
 
@@ -43,14 +45,17 @@ interface ProductEditDialogProps {
   onOpenChange: (open: boolean) => void;
   editingProduct: Product | null;
   isNewProduct: boolean;
-  isCatalogLoading?: boolean;
   onSave: () => void;
-  isSaving?: boolean;
   updateField: <K extends keyof Product>(key: K, value: Product[K]) => void;
   updateAttribute: (key: string, value: string) => void;
   removeAttribute: (key: string) => void;
+  // Edit mode: adds URLs directly to the product's imageUrls list
   onImagesUploaded: (urls: string[]) => void;
   onRemoveImage: (index: number) => void;
+  // New product mode: holds processed blobs until confirmed save uploads them
+  pendingImages: PendingImages | null;
+  onImagesProcessed: (images: PendingImages) => void;
+  onClearImages: () => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -60,14 +65,15 @@ export function ProductEditDialog({
   onOpenChange,
   editingProduct,
   isNewProduct,
-  isCatalogLoading = false,
   onSave,
-  isSaving = false,
   updateField,
   updateAttribute,
   removeAttribute,
   onImagesUploaded,
   onRemoveImage,
+  pendingImages,
+  onImagesProcessed,
+  onClearImages,
 }: ProductEditDialogProps) {
   const colorInputRef = useRef<HTMLInputElement>(null);
 
@@ -120,18 +126,11 @@ export function ProductEditDialog({
           <ScrollArea className="max-h-[65vh]">
             <div className="px-6 pb-2 space-y-4">
 
-              {/* ── Catalog-loading banner ── */}
+              {/* ── Edit-mode info banner ── */}
               {!isNewProduct && (
-                isCatalogLoading ? (
-                  <div className="mt-2 rounded-xl bg-muted/60 border border-border/50 px-4 py-3 text-xs text-muted-foreground flex items-center gap-2">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                    Fetching full product details from the database…
-                  </div>
-                ) : (
-                  <div className="mt-2 rounded-xl bg-primary/5 border border-primary/20 px-4 py-3 text-xs text-primary/80 leading-relaxed">
-                    All fields are pre-filled from the database. Only fields you change will be updated — everything else stays untouched.
-                  </div>
-                )
+                <div className="mt-2 rounded-xl bg-primary/5 border border-primary/20 px-4 py-3 text-xs text-primary/80 leading-relaxed">
+                  All fields are pre-filled from the database. Only fields you actually change will be updated — unchanged fields are left exactly as they are.
+                </div>
               )}
 
               {/* ── Basic Info ── */}
@@ -227,23 +226,39 @@ export function ProductEditDialog({
                 </FormField>
               </div>
 
-              {/* ── Media (upload only) ── */}
+              {/* ── Media ── */}
               <SectionDivider>Media</SectionDivider>
-              <ImageUploadZone onFilesAdded={onImagesUploaded} multiple />
-              {editingProduct.imageUrls.length > 0 && (
-                <div className="flex gap-2 flex-wrap">
-                  {editingProduct.imageUrls.map((url, i) => (
-                    <div key={i} className="relative group/img">
-                      <img src={url} alt="" className="w-16 h-16 rounded-xl object-cover border border-border" />
-                      <button
-                        onClick={() => onRemoveImage(i)}
-                        className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity shadow"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+              {isNewProduct ? (
+                /* New product: process locally → upload on confirm */
+                <ImageProcessingPanel
+                  current={pendingImages}
+                  onProcessed={onImagesProcessed}
+                  onClear={onClearImages}
+                />
+              ) : (
+                /* Edit mode: add image URLs directly */
+                <>
+                  <ImageUploadZone onFilesAdded={onImagesUploaded} multiple />
+                  {editingProduct.imageUrls.length > 0 && (
+                    <div className="flex gap-2 flex-wrap">
+                      {editingProduct.imageUrls.map((url, i) => (
+                        <div key={i} className="relative group/img">
+                          <img
+                            src={url}
+                            alt=""
+                            className="w-16 h-16 rounded-xl object-cover border border-border"
+                          />
+                          <button
+                            onClick={() => onRemoveImage(i)}
+                            className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity shadow"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
 
               {/* ── Image Color ── */}
@@ -377,8 +392,8 @@ export function ProductEditDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)} className="rounded-xl">
               Cancel
             </Button>
-            <Button onClick={onSave} disabled={isSaving || isCatalogLoading} className="rounded-xl shadow-lg shadow-primary/20">
-              {isSaving ? "Saving…" : isCatalogLoading ? "Loading…" : isNewProduct ? "Add Product" : "Save Changes"}
+            <Button onClick={onSave} className="rounded-xl shadow-lg shadow-primary/20">
+              {isNewProduct ? "Review & Add" : "Review Changes"}
             </Button>
           </DialogFooter>
         </div>

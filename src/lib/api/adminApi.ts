@@ -315,17 +315,6 @@ export async function updateProduct(
   return res.data.data;
 }
 
-export async function updateProduct(
-  id: string,
-  payload: Partial<CreateProductPayload>,
-): Promise<AdminProduct> {
-  const res = await adminApi.put<ApiResponse<AdminProduct>>(
-    `/market/admin/products/${id}`,
-    payload,
-  );
-  return res.data.data;
-}
-
 export async function toggleProductActive(id: string): Promise<AdminProduct> {
   const res = await adminApi.patch<ApiResponse<AdminProduct>>(
     `/market/admin/products/${id}/toggle`,
