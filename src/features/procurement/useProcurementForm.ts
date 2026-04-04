@@ -32,12 +32,14 @@ export function useProcurementForm(
 
     const newItem: ProcurementItem = {
       id: Math.random().toString(36).substr(2, 9),
+      productId: "",
       name: formData.name,
-      quantity: Number(formData.quantity),
+      neededToday: Number(formData.quantity),
       unit: formData.unit,
-      imageUrl: imageUrl || DEFAULT_IMAGE,
-      date: new Date().toISOString().split("T")[0],
-      status: "Pending",
+      unitWeight: formData.unit,
+      orderCount: 0,
+      warehouseId: "",
+      status: "PENDING",
     };
 
     setProcurementItems([newItem, ...procurementItems]);

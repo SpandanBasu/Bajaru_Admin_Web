@@ -71,8 +71,9 @@ export function useProductEditor(_products: Product[], _setProducts: unknown) {
     if (FIXED_ATTR_KEYS.includes(key as (typeof FIXED_ATTR_KEYS)[number])) return;
     setEditingProduct((prev) => {
       if (!prev) return prev;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { [key]: _, ...rest } = prev.attributes;
-      return { ...prev, attributes: rest };
+      return { ...prev, attributes: rest as typeof prev.attributes };
     });
   };
 

@@ -328,8 +328,14 @@ export default function Products() {
       // upsert inventory using the real id the backend assigned
       await upsertMutation.mutateAsync({ ...inventoryPayload, productId: created.id });
     } else {
-      if (Object.keys(catalogDiff).length > 0) {
-        await updateMutation.mutateAsync({ id: p.id, payload: catalogDiff });
+      // Upload any newly processed images and merge with existing imageUrls
+      let finalCatalogDiff = catalogDiff;
+      if (pendingImages && pendingImages.slots.length > 0) {
+        const uploadedUrls = await uploadProductImages(pendingImages.slots, p.name, pendingImages.category);
+        finalCatalogDiff = { ...catalogDiff, imageUrls: [...p.imageUrls, ...uploadedUrls] };
+      }
+      if (Object.keys(finalCatalogDiff).length > 0) {
+        await updateMutation.mutateAsync({ id: p.id, payload: finalCatalogDiff });
       }
       await upsertMutation.mutateAsync(inventoryPayload);
     }
@@ -447,7 +453,6 @@ export default function Products() {
         updateField={editor.updateField}
         updateAttribute={editor.updateAttribute}
         removeAttribute={editor.removeAttribute}
-        onImagesUploaded={editor.handleUploadedImages}
         onRemoveImage={editor.removeImage}
         pendingImages={pendingImages}
         onImagesProcessed={setPendingImages}

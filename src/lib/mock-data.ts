@@ -84,8 +84,8 @@ export const INITIAL_PRODUCTS: Product[] = [
 ];
 
 export const INITIAL_PROCUREMENT: ProcurementItem[] = [
-  { id: "101", name: "Organic Garlic", quantity: 50, unit: "kg", imageUrl: "https://images.unsplash.com/photo-1540148426946-57ac8fd4501a?w=150&h=150&fit=crop", date: "2024-05-12", status: "Pending" },
-  { id: "102", name: "Green Chillies", quantity: 15, unit: "kg", imageUrl: "https://images.unsplash.com/photo-1588252303782-cb80119fddcd?w=150&h=150&fit=crop", date: "2024-05-11", status: "Received" },
+  { id: "101", productId: "p1", name: "Organic Garlic", neededToday: 50, unit: "kg", unitWeight: "1 kg", orderCount: 5, warehouseId: "wh1", status: "PENDING" },
+  { id: "102", productId: "p2", name: "Green Chillies", neededToday: 15, unit: "kg", unitWeight: "500 g", orderCount: 3, warehouseId: "wh1", status: "RECEIVED" },
 ];
 
 export const CHART_DATA = [

@@ -9,6 +9,11 @@ import { AppLayout } from "@/components/layout/app-layout";
 import Dashboard from "@/pages/dashboard";
 import Products from "@/pages/products";
 import Procurement from "@/pages/procurement";
+import Orders from "@/pages/orders";
+import Customers from "@/pages/customers";
+import Ratings from "@/pages/ratings";
+import Permissions from "@/pages/permissions";
+import Riders from "@/pages/riders";
 import SignIn from "@/pages/sign-in";
 import { setLogoutHandler } from "@/lib/api/adminApi";
 
@@ -29,8 +34,13 @@ function Router() {
     <AppLayout>
       <Switch>
         <Route path="/" component={Dashboard} />
+        <Route path="/orders" component={Orders} />
         <Route path="/products" component={Products} />
         <Route path="/procurement" component={Procurement} />
+        <Route path="/riders" component={Riders} />
+        <Route path="/customers" component={Customers} />
+        <Route path="/ratings" component={Ratings} />
+        <Route path="/permissions" component={Permissions} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>

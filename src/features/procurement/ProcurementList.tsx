@@ -1,21 +1,39 @@
 import { motion } from "framer-motion";
-import { Truck, CheckCircle2 } from "lucide-react";
+import { Truck, CheckCircle2, Package } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import type { ProcurementItem } from "@/lib/types";
 
 interface ProcurementListProps {
   items: ProcurementItem[];
+  isLoading?: boolean;
   onMarkReceived: (id: string) => void;
 }
 
-export function ProcurementList({ items, onMarkReceived }: ProcurementListProps) {
+export function ProcurementList({ items, isLoading, onMarkReceived }: ProcurementListProps) {
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-6 w-40 rounded-xl" />
+          <Skeleton className="h-4 w-20 rounded-xl" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 rounded-2xl" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-xl font-bold font-display">Recent Orders</h3>
-        <span className="text-sm text-muted-foreground">Total: {items.length} items</span>
+        <h3 className="text-xl font-bold font-display">Today's Requirements</h3>
+        <span className="text-sm text-muted-foreground">{items.length} items</span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -24,34 +42,38 @@ export function ProcurementList({ items, onMarkReceived }: ProcurementListProps)
             key={item.id}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
+            transition={{ delay: index * 0.04 }}
           >
             <Card className="overflow-hidden border-border/50 rounded-2xl hover:shadow-md transition-all group">
               <div className="flex p-4 gap-4 h-full">
-                <div className="w-24 h-24 rounded-xl overflow-hidden shrink-0 bg-muted border border-border/50">
-                  <img
-                    src={item.imageUrl}
-                    alt={item.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Package className="w-6 h-6 text-primary" />
                 </div>
-                <div className="flex flex-col flex-1 py-1 justify-between">
+                <div className="flex flex-col flex-1 py-0.5 justify-between min-w-0">
                   <div>
-                    <div className="flex justify-between items-start">
-                      <h4 className="font-bold text-base line-clamp-1 pr-2">{item.name}</h4>
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-base line-clamp-1">{item.name}</h4>
+                        <p className="text-muted-foreground text-xs mt-0.5">{item.unitWeight}</p>
+                      </div>
                       <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-md shrink-0 ${
-                        item.status === "Received" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                        item.status === "RECEIVED"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-amber-100 text-amber-700"
                       }`}>
-                        {item.status}
+                        {item.status === "RECEIVED" ? "Received" : "Pending"}
                       </span>
                     </div>
-                    <p className="text-muted-foreground text-sm mt-1">Order Date: {item.date}</p>
+                    <p className="text-muted-foreground text-xs mt-1">
+                      {item.orderCount} {item.orderCount === 1 ? "order" : "orders"} today
+                    </p>
                   </div>
                   <div className="flex items-end justify-between mt-3">
                     <div className="text-lg font-bold font-display text-foreground">
-                      {item.quantity} <span className="text-sm font-normal text-muted-foreground">{item.unit}</span>
+                      {item.neededToday.toFixed(1)}{" "}
+                      <span className="text-sm font-normal text-muted-foreground">{item.unit}</span>
                     </div>
-                    {item.status === "Pending" && (
+                    {item.status !== "RECEIVED" && (
                       <Button
                         variant="secondary"
                         size="sm"
@@ -73,7 +95,7 @@ export function ProcurementList({ items, onMarkReceived }: ProcurementListProps)
           <div className="col-span-full">
             <EmptyState
               icon={Truck}
-              title="No procurement orders yet."
+              title="No procurement required today."
               className="py-16 border-dashed"
             />
           </div>

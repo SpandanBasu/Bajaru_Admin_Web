@@ -1,5 +1,8 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, ShoppingBasket, Truck, LogOut } from "lucide-react";
+import {
+  LayoutDashboard, ShoppingBasket, Truck, ClipboardList, LogOut,
+  HeadphonesIcon, Star, Shield, Bike,
+} from "lucide-react";
 import { useAppStore } from "@/lib/store";
 
 export function Sidebar() {
@@ -7,9 +10,14 @@ export function Sidebar() {
   const { signOut } = useAppStore();
 
   const navItems = [
-    { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "Products", href: "/products", icon: ShoppingBasket },
-    { name: "Procurement", href: "/procurement", icon: Truck },
+    { name: "Dashboard",    href: "/",            icon: LayoutDashboard },
+    { name: "Orders",       href: "/orders",       icon: ClipboardList },
+    { name: "Products",     href: "/products",     icon: ShoppingBasket },
+    { name: "Procurement",  href: "/procurement",  icon: Truck },
+    { name: "Riders",       href: "/riders",       icon: Bike },
+    { name: "Customers",    href: "/customers",    icon: HeadphonesIcon },
+    { name: "Ratings",      href: "/ratings",      icon: Star },
+    { name: "Permissions",  href: "/permissions",  icon: Shield },
   ];
 
   return (

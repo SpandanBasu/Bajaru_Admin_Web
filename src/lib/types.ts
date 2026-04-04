@@ -38,10 +38,12 @@ export type Product = {
 
 export type ProcurementItem = {
   id: string;
+  productId: string;
   name: string;
-  quantity: number;
+  neededToday: number;
   unit: string;
-  imageUrl: string;
-  date: string;
-  status: "Pending" | "Received";
+  unitWeight: string;
+  orderCount: number;
+  warehouseId: string;
+  status: string;
 };

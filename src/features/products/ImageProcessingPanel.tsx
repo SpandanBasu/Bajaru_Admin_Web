@@ -16,14 +16,14 @@ export const IMAGE_CATEGORIES = [
 ] as const;
 
 export type ImageCategory = (typeof IMAGE_CATEGORIES)[number]["value"];
-
 export type ImageSize = 200 | 800;
 
 interface ImageSlot {
   id: string;
   file: File | null;
+  rawPreview: string | null; // object URL of original file — shown blurred before compression
   blob: Blob | null;
-  preview: string | null;
+  preview: string | null;    // object URL of compressed result — shown crisp when ready
   size: ImageSize;
   status: "empty" | "compressing" | "ready" | "error";
   error: string | null;
@@ -49,26 +49,12 @@ interface ImageProcessingPanelProps {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeSlot(size: ImageSize = 800): ImageSlot {
-  return {
-    id: Math.random().toString(36).slice(2),
-    file: null,
-    blob: null,
-    preview: null,
-    size,
-    status: "empty",
-    error: null,
-  };
+  return { id: Math.random().toString(36).slice(2), file: null, rawPreview: null, blob: null, preview: null, size, status: "empty", error: null };
 }
+function qualityFor(size: ImageSize) { return size === 200 ? 1.0 : 0.8; }
+function whiteBgFor(size: ImageSize) { return size === 800; }
 
-function qualityFor(size: ImageSize) {
-  return size === 200 ? 1.0 : 0.8; // lossless for thumbnail, 80% for detail
-}
-
-function whiteBgFor(size: ImageSize) {
-  return size === 800; // strip alpha for detail
-}
-
-// ─── Single image slot ────────────────────────────────────────────────────────
+// ─── Slot card ────────────────────────────────────────────────────────────────
 
 interface SlotCardProps {
   slot: ImageSlot;
@@ -83,6 +69,7 @@ function SlotCard({ slot, onFile, onSizeChange, onCompress, onRemove }: SlotCard
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    if (slot.status === "compressing") return;
     const file = e.dataTransfer.files[0];
     if (file) onFile(slot.id, file);
   };
@@ -93,16 +80,18 @@ function SlotCard({ slot, onFile, onSizeChange, onCompress, onRemove }: SlotCard
     e.target.value = "";
   };
 
-  const sizeLabel = slot.size === 200 ? "200×200 (thumbnail)" : "800×800 (detail)";
+  const triggerPick = () => {
+    if (slot.status !== "compressing") inputRef.current?.click();
+  };
+
+  const sizeLabel = slot.size === 200 ? "200×200 · thumbnail" : "800×800 · detail";
 
   return (
     <div className="rounded-2xl border border-border/50 overflow-hidden bg-card">
-      {/* Top bar: size selector + delete */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border/40 bg-secondary/30">
-        <Select
-          value={String(slot.size)}
-          onValueChange={(v) => onSizeChange(slot.id, Number(v) as ImageSize)}
-        >
+
+      {/* Top bar */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border/40 bg-muted/30">
+        <Select value={String(slot.size)} onValueChange={(v) => onSizeChange(slot.id, Number(v) as ImageSize)}>
           <SelectTrigger className="h-7 text-xs rounded-lg border-border/50 bg-background flex-1">
             <SelectValue />
           </SelectTrigger>
@@ -120,63 +109,94 @@ function SlotCard({ slot, onFile, onSizeChange, onCompress, onRemove }: SlotCard
         </button>
       </div>
 
-      {/* Image preview or drop zone */}
       <div className="p-3 space-y-2">
-        {slot.status === "ready" && slot.preview ? (
-          <div className="relative">
-            <img
-              src={slot.preview}
-              alt={sizeLabel}
-              className="w-full aspect-square object-cover rounded-xl border border-border/30"
-            />
-            <div className="absolute top-2 left-2 bg-green-500/90 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
+
+        {/* ── Image area (layered) ── */}
+        <div
+          className="relative w-full aspect-square rounded-xl overflow-hidden"
+          onDrop={handleDrop}
+          onDragOver={(e) => e.preventDefault()}
+        >
+          {/* Hidden file input — always present */}
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            onChange={handleInput}
+            disabled={slot.status === "compressing"}
+          />
+
+          {/* ── Layer 1: base image ── */}
+          {slot.status === "ready" && slot.preview ? (
+            // Crisp compressed result
+            <img src={slot.preview} alt={sizeLabel} className="w-full h-full object-cover" />
+          ) : slot.rawPreview ? (
+            // Blurred original — shown while waiting to compress or while compressing
+            <>
+              <img
+                src={slot.rawPreview}
+                alt="Preview"
+                className="absolute inset-0 w-full h-full object-cover scale-110 blur-lg"
+              />
+              <div className="absolute inset-0 bg-black/30" />
+            </>
+          ) : (
+            // Empty drop zone — visible dashed border with icon
+            <div
+              className="absolute inset-0 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-border rounded-xl bg-secondary cursor-pointer hover:border-primary/60 hover:bg-primary/5 transition-colors"
+              onClick={triggerPick}
+            >
+              <Upload className="w-7 h-7 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground text-center px-3 leading-relaxed">
+                Drop image here<br />or click to pick
+              </p>
+            </div>
+          )}
+
+          {/* ── Layer 2: compressing spinner ── */}
+          {slot.status === "compressing" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/20">
+              <Loader2 className="w-8 h-8 text-white animate-spin drop-shadow" />
+              <p className="text-xs text-white font-semibold mt-2 drop-shadow">Compressing…</p>
+            </div>
+          )}
+
+          {/* ── Layer 3: "file selected" hint (click to change) ── */}
+          {slot.file && slot.status === "empty" && (
+            <div
+              className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer"
+              onClick={triggerPick}
+            >
+              <div className="bg-black/55 backdrop-blur-sm rounded-xl px-3 py-2 text-center mx-3 max-w-full">
+                <p className="text-[11px] text-white font-medium leading-snug truncate">
+                  {slot.file.name}
+                </p>
+                <p className="text-[10px] text-white/60 mt-0.5">tap to change · compress below</p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Layer 4: Ready badge ── */}
+          {slot.status === "ready" && (
+            <div className="absolute top-2 left-2 bg-green-500/90 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 shadow">
               <CheckCircle2 className="w-2.5 h-2.5" />
               Ready
             </div>
-          </div>
-        ) : (
-          <label
-            className={`flex flex-col items-center justify-center w-full aspect-square border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200 ${
-              slot.status === "compressing"
-                ? "border-primary/40 bg-primary/5 cursor-default"
-                : "border-border/40 bg-secondary/20 hover:border-primary/40 hover:bg-primary/5"
-            }`}
-            onDrop={handleDrop}
-            onDragOver={(e) => e.preventDefault()}
-          >
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/*"
-              className="sr-only"
-              onChange={handleInput}
-              disabled={slot.status === "compressing"}
-            />
-            {slot.status === "compressing" ? (
-              <div className="flex flex-col items-center gap-1.5 pointer-events-none">
-                <Loader2 className="w-6 h-6 text-primary animate-spin" />
-                <p className="text-xs text-primary font-medium">Compressing…</p>
+          )}
+
+          {/* ── Layer 5: hover-to-change on ready image ── */}
+          {slot.status === "ready" && (
+            <div
+              className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center bg-black/20 cursor-pointer"
+              onClick={triggerPick}
+            >
+              <div className="bg-black/60 rounded-lg px-2.5 py-1.5">
+                <p className="text-[11px] text-white font-medium">Click to change</p>
               </div>
-            ) : slot.file ? (
-              <div className="flex flex-col items-center gap-1.5 px-2 text-center">
-                <Upload className="w-5 h-5 text-muted-foreground" />
-                <p className="text-[11px] text-muted-foreground leading-tight break-all">
-                  {slot.file.name}
-                </p>
-                <p className="text-[10px] text-muted-foreground/60">
-                  Click "Compress" below
-                </p>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-1.5">
-                <Upload className="w-5 h-5 text-muted-foreground/60" />
-                <p className="text-[11px] text-muted-foreground text-center leading-tight px-2">
-                  Drop image<br />or click to pick
-                </p>
-              </div>
-            )}
-          </label>
-        )}
+            </div>
+          )}
+        </div>
 
         {/* Error */}
         {slot.error && (
@@ -184,13 +204,6 @@ function SlotCard({ slot, onFile, onSizeChange, onCompress, onRemove }: SlotCard
             <AlertCircle className="w-3 h-3 shrink-0" />
             {slot.error}
           </div>
-        )}
-
-        {/* Source file for ready state */}
-        {slot.status === "ready" && slot.file && (
-          <p className="text-[10px] text-muted-foreground truncate">
-            Source: {slot.file.name}
-          </p>
         )}
 
         {/* Action buttons */}
@@ -203,41 +216,24 @@ function SlotCard({ slot, onFile, onSizeChange, onCompress, onRemove }: SlotCard
               disabled={!slot.file || slot.status === "compressing"}
               onClick={() => onCompress(slot.id)}
             >
-              {slot.status === "compressing" ? (
-                <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Compressing</>
-              ) : (
-                "Compress"
-              )}
+              {slot.status === "compressing"
+                ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Compressing</>
+                : "Compress"
+              }
             </Button>
           ) : (
             <>
-              {/* Re-pick file */}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="flex-1 h-7 text-xs rounded-lg"
-                onClick={() => inputRef.current?.click()}
-              >
-                <Upload className="w-3 h-3 mr-1" />
-                Change
+              <Button type="button" variant="outline" size="sm" className="flex-1 h-7 text-xs rounded-lg" onClick={triggerPick}>
+                <Upload className="w-3 h-3 mr-1" />Change
               </Button>
-              {/* Re-compress with current file */}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="flex-1 h-7 text-xs rounded-lg"
-                onClick={() => onCompress(slot.id)}
-              >
-                <RefreshCw className="w-3 h-3 mr-1" />
-                Recompress
+              <Button type="button" variant="outline" size="sm" className="flex-1 h-7 text-xs rounded-lg" onClick={() => onCompress(slot.id)}>
+                <RefreshCw className="w-3 h-3 mr-1" />Recompress
               </Button>
             </>
           )}
         </div>
 
-        {/* Size/quality info */}
+        {/* Size/quality label */}
         <p className="text-[10px] text-muted-foreground/70 text-center">
           {sizeLabel} · WebP · {slot.size === 200 ? "lossless" : "80% quality"}
         </p>
@@ -249,13 +245,15 @@ function SlotCard({ slot, onFile, onSizeChange, onCompress, onRemove }: SlotCard
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
 export function ImageProcessingPanel({ current, onProcessed, onClear }: ImageProcessingPanelProps) {
-  // Default: one 800×800 detail slot + one 200×200 thumbnail slot
   const [slots, setSlots] = useState<ImageSlot[]>(() => [makeSlot(800), makeSlot(200)]);
   const [category, setCategory] = useState<ImageCategory>("others");
 
-  /** Compute and push ready results to parent. */
+  // Always-fresh ref so callbacks never have stale closure over slots
+  const slotsRef = useRef(slots);
+  slotsRef.current = slots;
+
   const syncParent = useCallback(
-    (updatedSlots: ImageSlot[], updatedCategory: ImageCategory) => {
+    (updatedSlots: ImageSlot[], cat: ImageCategory) => {
       const ready = updatedSlots.filter(
         (s): s is ImageSlot & { blob: Blob; preview: string } =>
           s.status === "ready" && s.blob !== null && s.preview !== null,
@@ -263,10 +261,7 @@ export function ImageProcessingPanel({ current, onProcessed, onClear }: ImagePro
       if (ready.length === 0) {
         onClear();
       } else {
-        onProcessed({
-          slots: ready.map((s) => ({ blob: s.blob, preview: s.preview, size: s.size })),
-          category: updatedCategory,
-        });
+        onProcessed({ slots: ready.map((s) => ({ blob: s.blob, preview: s.preview, size: s.size })), category: cat });
       }
     },
     [onProcessed, onClear],
@@ -274,110 +269,86 @@ export function ImageProcessingPanel({ current, onProcessed, onClear }: ImagePro
 
   const handleCategoryChange = (value: ImageCategory) => {
     setCategory(value);
-    if (current) {
-      onProcessed({ ...current, category: value });
-    }
+    if (current) onProcessed({ ...current, category: value });
   };
 
-  const handleFile = useCallback(
-    (id: string, file: File) => {
-      if (!file.type.startsWith("image/")) return;
-      setSlots((prev) =>
-        prev.map((s) =>
-          s.id === id
-            ? { ...s, file, status: "empty", blob: null, preview: null, error: null }
-            : s,
-        ),
-      );
-    },
-    [],
-  );
+  const handleFile = useCallback((id: string, file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    // Revoke old rawPreview for this slot
+    const old = slotsRef.current.find((s) => s.id === id);
+    if (old?.rawPreview) URL.revokeObjectURL(old.rawPreview);
 
-  const handleSizeChange = useCallback((id: string, size: ImageSize) => {
+    const rawPreview = URL.createObjectURL(file);
     setSlots((prev) =>
       prev.map((s) =>
         s.id === id
-          ? { ...s, size, blob: null, preview: null, status: s.file ? "empty" : "empty", error: null }
+          ? { ...s, file, rawPreview, status: "empty", blob: null, preview: null, error: null }
           : s,
       ),
     );
-    // If that slot was ready, update parent
+  }, []);
+
+  const handleSizeChange = useCallback((id: string, size: ImageSize) => {
     setSlots((prev) => {
-      syncParent(prev, category);
-      return prev;
+      const updated = prev.map((s) => {
+        if (s.id !== id) return s;
+        // Revoke compressed preview (raw stays — same source file)
+        if (s.preview) URL.revokeObjectURL(s.preview);
+        return { ...s, size, blob: null, preview: null, status: "empty" as const, error: null };
+      });
+      syncParent(updated, slotsRef.current.find((s) => s.id === id)?.size === size
+        ? category
+        : category); // category unchanged, just re-sync
+      return updated;
     });
   }, [category, syncParent]);
 
-  const handleCompress = useCallback(
-    async (id: string) => {
-      setSlots((prev) => {
-        const slot = prev.find((s) => s.id === id);
-        if (!slot?.file) return prev;
-        return prev.map((s) => (s.id === id ? { ...s, status: "compressing", error: null } : s));
-      });
+  const handleCompress = useCallback(async (id: string) => {
+    const slot = slotsRef.current.find((s) => s.id === id);
+    if (!slot?.file) return;
+
+    const { file, size } = slot;
+
+    setSlots((prev) => prev.map((s) => s.id === id ? { ...s, status: "compressing" as const, error: null } : s));
+
+    try {
+      const blob = await processProductImageToSize(file, size, whiteBgFor(size), qualityFor(size));
+      const preview = URL.createObjectURL(blob);
 
       setSlots((prev) => {
-        const slot = prev.find((s) => s.id === id);
-        if (!slot?.file) return prev;
-
-        // Kick off async compress outside of setState
-        (async () => {
-          try {
-            const blob = await processProductImageToSize(
-              slot.file!,
-              slot.size,
-              whiteBgFor(slot.size),
-              qualityFor(slot.size),
-            );
-            // Revoke old preview
-            if (slot.preview) URL.revokeObjectURL(slot.preview);
-            const preview = URL.createObjectURL(blob);
-
-            setSlots((current) => {
-              const updated = current.map((s) =>
-                s.id === id ? { ...s, blob, preview, status: "ready" as const, error: null } : s,
-              );
-              syncParent(updated, category);
-              return updated;
-            });
-          } catch {
-            setSlots((current) =>
-              current.map((s) =>
-                s.id === id
-                  ? { ...s, status: "error" as const, error: "Compression failed. Try a different file." }
-                  : s,
-              ),
-            );
-          }
-        })();
-
-        return prev; // return unchanged for this setState call
-      });
-    },
-    [category, syncParent],
-  );
-
-  const handleRemove = useCallback(
-    (id: string) => {
-      setSlots((prev) => {
-        const slot = prev.find((s) => s.id === id);
-        if (slot?.preview) URL.revokeObjectURL(slot.preview);
-        const updated = prev.filter((s) => s.id !== id);
+        const old = prev.find((s) => s.id === id);
+        if (old?.preview) URL.revokeObjectURL(old.preview); // revoke old compressed
+        const updated = prev.map((s) =>
+          s.id === id ? { ...s, blob, preview, status: "ready" as const, error: null } : s,
+        );
         syncParent(updated, category);
         return updated;
       });
-    },
-    [category, syncParent],
-  );
+    } catch {
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.id === id ? { ...s, status: "error" as const, error: "Compression failed. Try a different file." } : s,
+        ),
+      );
+    }
+  }, [category, syncParent]);
 
-  const addSlot = () => {
-    setSlots((prev) => [...prev, makeSlot(800)]);
-  };
+  const handleRemove = useCallback((id: string) => {
+    setSlots((prev) => {
+      const slot = prev.find((s) => s.id === id);
+      if (slot?.rawPreview) URL.revokeObjectURL(slot.rawPreview);
+      if (slot?.preview) URL.revokeObjectURL(slot.preview);
+      const updated = prev.filter((s) => s.id !== id);
+      syncParent(updated, category);
+      return updated;
+    });
+  }, [category, syncParent]);
 
   const readyCount = slots.filter((s) => s.status === "ready").length;
 
   return (
     <div className="space-y-3">
+
       {/* Category */}
       <FormField label="Image Category (upload folder)">
         <Select value={category} onValueChange={(v) => handleCategoryChange(v as ImageCategory)}>
@@ -386,15 +357,13 @@ export function ImageProcessingPanel({ current, onProcessed, onClear }: ImagePro
           </SelectTrigger>
           <SelectContent className="rounded-xl">
             {IMAGE_CATEGORIES.map((c) => (
-              <SelectItem key={c.value} value={c.value}>
-                {c.label}
-              </SelectItem>
+              <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
       </FormField>
 
-      {/* Status summary */}
+      {/* Ready count */}
       {readyCount > 0 && (
         <div className="flex items-center gap-1.5 text-xs font-semibold text-green-600">
           <CheckCircle2 className="w-3.5 h-3.5" />
@@ -416,12 +385,12 @@ export function ImageProcessingPanel({ current, onProcessed, onClear }: ImagePro
         ))}
       </div>
 
-      {/* Add image button */}
+      {/* Add slot */}
       <Button
         type="button"
         variant="outline"
         size="sm"
-        onClick={addSlot}
+        onClick={() => setSlots((prev) => [...prev, makeSlot(800)])}
         className="w-full rounded-xl border-dashed h-9 text-muted-foreground hover:text-foreground"
       >
         <Plus className="w-3.5 h-3.5 mr-1.5" />
@@ -429,7 +398,7 @@ export function ImageProcessingPanel({ current, onProcessed, onClear }: ImagePro
       </Button>
 
       <p className="text-[10px] text-muted-foreground text-center">
-        Each image can be a different source file. Upload and compress independently.
+        Each slot can use a different source image. Upload and compress independently.
       </p>
     </div>
   );

@@ -1,33 +1,47 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { ProcurementForm } from "@/features/procurement/ProcurementForm";
 import { ProcurementList } from "@/features/procurement/ProcurementList";
-import { useProcurementForm } from "@/features/procurement/useProcurementForm";
 import { getProcurementItems, markProcurementReceived } from "@/lib/api/adminApi";
+import type { ProcurementLine } from "@/lib/api/adminApi";
 import type { ProcurementItem } from "@/lib/types";
-import type { ProcurementOrderItem } from "@/lib/api/adminApi";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Package, ShoppingCart, TrendingUp, Layers } from "lucide-react";
 
-function toItem(p: ProcurementOrderItem): ProcurementItem {
+function toItem(p: ProcurementLine): ProcurementItem {
   return {
     id: p.id,
+    productId: p.productId,
     name: p.name,
-    quantity: p.quantity,
+    neededToday: p.neededToday,
     unit: p.unit,
-    imageUrl: p.imageUrl ?? "",
-    date: p.date,
+    unitWeight: p.unitWeight,
+    orderCount: p.orderCount,
+    warehouseId: p.warehouseId,
     status: p.status,
   };
+}
+
+function StatCard({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string | number }) {
+  return (
+    <div className="rounded-2xl border border-border/50 bg-card p-5 flex items-center gap-4">
+      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+        <Icon className="w-5 h-5 text-primary" />
+      </div>
+      <div>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-xl font-bold text-foreground">{value}</p>
+      </div>
+    </div>
+  );
 }
 
 export default function Procurement() {
   const queryClient = useQueryClient();
 
-  const { data: apiItems = [] } = useQuery({
+  const { data: summary, isLoading } = useQuery({
     queryKey: ["procurement-items"],
     queryFn: getProcurementItems,
   });
-
-  const items: ProcurementItem[] = apiItems.map(toItem);
 
   const markMutation = useMutation({
     mutationFn: ({ productId, warehouseId }: { productId: string; warehouseId: string }) =>
@@ -35,37 +49,37 @@ export default function Procurement() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["procurement-items"] }),
   });
 
+  const items: ProcurementItem[] = (summary?.items ?? []).map(toItem);
+
   const markReceived = (id: string) => {
-    // id is `productId` for now; warehouseId comes from the raw item
-    const raw = apiItems.find((i) => i.id === id);
+    const raw = summary?.items.find((i) => i.id === id);
     if (!raw) return;
     markMutation.mutate({ productId: raw.productId, warehouseId: raw.warehouseId });
   };
-
-  const form = useProcurementForm(items, () => {});
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-12">
       <PageHeader
         title="Procurement"
-        subtitle="Order new supplies and manage incoming inventory."
+        subtitle="Today's procurement requirements based on active orders."
       />
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        <div className="xl:col-span-1">
-          <ProcurementForm
-            formData={form.formData}
-            setFormData={form.setFormData}
-            imageUrl={form.imageUrl}
-            onImageAdded={form.handleImageFile}
-            onClearImage={form.clearImage}
-            onSubmit={form.handleSubmit}
-          />
+      {isLoading ? (
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-2xl" />
+          ))}
         </div>
-        <div className="xl:col-span-2">
-          <ProcurementList items={items} onMarkReceived={markReceived} />
+      ) : summary ? (
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+          <StatCard icon={Package} label="Items to Source" value={summary.itemCount} />
+          <StatCard icon={ShoppingCart} label="Active Orders" value={summary.orderCount} />
+          <StatCard icon={TrendingUp} label="Total Needed" value={summary.totalNeeded.toFixed(1)} />
+          <StatCard icon={Layers} label="To Procure" value={summary.totalToProcure.toFixed(1)} />
         </div>
-      </div>
+      ) : null}
+
+      <ProcurementList items={items} isLoading={isLoading} onMarkReceived={markReceived} />
     </div>
   );
 }

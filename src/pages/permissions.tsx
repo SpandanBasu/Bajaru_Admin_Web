@@ -1,0 +1,524 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import {
+  checkSuperAdmin, listAllowedAdmins, addAllowedAdmin, removeAllowedAdmin,
+  listAllowedRiders, addAllowedRider, removeAllowedRider, getWarehouses,
+} from "@/lib/api/adminApi";
+import type { AllowedAdminEntry, AllowedRiderEntry } from "@/lib/api/adminApi";
+import {
+  Shield, ShieldCheck, UserPlus, Trash2, Search, Bike, AlertTriangle,
+} from "lucide-react";
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function filterBySearch<T extends { name: string; phoneNumber: string }>(items: T[], q: string) {
+  if (!q) return items;
+  const lower = q.toLowerCase();
+  return items.filter((i) => i.name.toLowerCase().includes(lower) || i.phoneNumber.includes(lower));
+}
+
+// ── Add Admin Dialog ──────────────────────────────────────────────────────────
+
+function AddAdminDialog({
+  open, isSuperAdmin: currentUserIsSuperAdmin, onClose, onAdded,
+}: { open: boolean; isSuperAdmin: boolean; onClose: () => void; onAdded: () => void }) {
+  const { toast } = useToast();
+  const [phone, setPhone] = useState("");
+  const [name, setName] = useState("");
+  const [makeSuperAdmin, setMakeSuperAdmin] = useState(false);
+
+  const mutation = useMutation({
+    mutationFn: () => addAllowedAdmin(phone.trim(), name.trim(), makeSuperAdmin),
+    onSuccess: () => {
+      toast({ title: "Admin added", description: `${name} can now log in to the Admin app.` });
+      setPhone(""); setName(""); setMakeSuperAdmin(false);
+      onAdded();
+      onClose();
+    },
+    onError: (err: unknown) => {
+      const status = (err as { response?: { status?: number } }).response?.status;
+      toast({
+        title: status === 409 ? "Already registered" : "Failed to add admin",
+        description: status === 409 ? "This phone number is already an admin." : "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Add Admin</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <Label htmlFor="admin-phone">Phone Number</Label>
+            <Input
+              id="admin-phone"
+              placeholder="+91XXXXXXXXXX"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="admin-name">Name</Label>
+            <Input
+              id="admin-name"
+              placeholder="Full name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+          {currentUserIsSuperAdmin && (
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="admin-super"
+                checked={makeSuperAdmin}
+                onCheckedChange={(v) => setMakeSuperAdmin(!!v)}
+              />
+              <Label htmlFor="admin-super">Make Super Admin</Label>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button
+            disabled={!phone.trim() || !name.trim() || mutation.isPending}
+            onClick={() => mutation.mutate()}
+          >
+            {mutation.isPending ? "Adding…" : "Add Admin"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Add Rider Dialog ──────────────────────────────────────────────────────────
+
+function AddRiderDialog({
+  open, onClose, onAdded,
+}: { open: boolean; onClose: () => void; onAdded: () => void }) {
+  const { toast } = useToast();
+  const [phone, setPhone] = useState("");
+  const [name, setName] = useState("");
+  const [warehouseId, setWarehouseId] = useState("");
+
+  const { data: warehouses = [] } = useQuery({
+    queryKey: ["warehouses"],
+    queryFn: getWarehouses,
+  });
+
+  const mutation = useMutation({
+    mutationFn: () => addAllowedRider(phone.trim(), name.trim(), warehouseId),
+    onSuccess: () => {
+      toast({ title: "Rider added", description: `${name} can now log in to the Rider app.` });
+      setPhone(""); setName(""); setWarehouseId("");
+      onAdded();
+      onClose();
+    },
+    onError: (err: unknown) => {
+      const status = (err as { response?: { status?: number } }).response?.status;
+      toast({
+        title: status === 409 ? "Already registered" : "Failed to add rider",
+        description: status === 409 ? "This phone number is already a rider." : "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Add Rider</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <Label htmlFor="rider-phone">Phone Number</Label>
+            <Input
+              id="rider-phone"
+              placeholder="+91XXXXXXXXXX"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="rider-name">Name</Label>
+            <Input
+              id="rider-name"
+              placeholder="Full name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label>Warehouse</Label>
+            <Select value={warehouseId} onValueChange={setWarehouseId}>
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Select warehouse" />
+              </SelectTrigger>
+              <SelectContent>
+                {warehouses.map((w) => (
+                  <SelectItem key={w.warehouseId} value={w.warehouseId}>
+                    {w.displayName} — {w.city}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button
+            disabled={!phone.trim() || !name.trim() || !warehouseId || mutation.isPending}
+            onClick={() => mutation.mutate()}
+          >
+            {mutation.isPending ? "Adding…" : "Add Rider"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Remove Confirm Dialog ─────────────────────────────────────────────────────
+
+function RemoveConfirmDialog({
+  open, name, onCancel, onConfirm, isPending,
+}: { open: boolean; name: string; onCancel: () => void; onConfirm: () => void; isPending: boolean }) {
+  return (
+    <AlertDialog open={open}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-red-500" />
+            Remove Access
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to remove <strong>{name}</strong>? They will no longer be able to log in.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onCancel}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={onConfirm}
+            disabled={isPending}
+            className="bg-red-500 hover:bg-red-600"
+          >
+            {isPending ? "Removing…" : "Remove"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+// ── Admins Tab ────────────────────────────────────────────────────────────────
+
+function AdminsTab({ isSuperAdmin }: { isSuperAdmin: boolean }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [search, setSearch] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<AllowedAdminEntry | null>(null);
+
+  const { data: admins = [], isLoading } = useQuery({
+    queryKey: ["allowed-admins"],
+    queryFn: listAllowedAdmins,
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: () => removeAllowedAdmin(removeTarget!.phoneNumber),
+    onSuccess: () => {
+      toast({ title: "Admin removed" });
+      setRemoveTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["allowed-admins"] });
+    },
+    onError: () => toast({ title: "Failed to remove", variant: "destructive" }),
+  });
+
+  const filtered = filterBySearch(admins, search);
+
+  return (
+    <>
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search admins…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 rounded-xl"
+            />
+          </div>
+          {isSuperAdmin && (
+            <Button onClick={() => setAddOpen(true)} className="rounded-xl">
+              <UserPlus className="w-4 h-4 mr-2" />
+              Add Admin
+            </Button>
+          )}
+        </div>
+
+        {!isSuperAdmin && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 flex items-start gap-2">
+            <Shield className="w-4 h-4 shrink-0 mt-0.5" />
+            Only super admins can add or remove other admins.
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border/50 overflow-hidden">
+            <div className="px-4 py-2.5 bg-muted/30 border-b border-border/50 text-xs text-muted-foreground font-medium">
+              {filtered.length} admin{filtered.length !== 1 ? "s" : ""}
+            </div>
+            {filtered.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-10">No admins found.</p>
+            ) : (
+              <div className="divide-y divide-border/40">
+                {filtered.map((admin) => (
+                  <div key={admin.id} className="flex items-center justify-between px-4 py-3.5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
+                        {admin.isSuperAdmin
+                          ? <ShieldCheck className="w-4 h-4 text-primary" />
+                          : <Shield className="w-4 h-4 text-muted-foreground" />
+                        }
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm text-foreground">
+                          {admin.name}
+                          {admin.isSuperAdmin && (
+                            <span className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">Super</span>
+                          )}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{admin.phoneNumber}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <p className="text-xs text-muted-foreground hidden sm:block">Added {fmtDate(admin.createdAt)}</p>
+                      {isSuperAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-8 h-8 text-red-400 hover:text-red-600 hover:bg-red-50"
+                          onClick={() => setRemoveTarget(admin)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <AddAdminDialog
+        open={addOpen}
+        isSuperAdmin={isSuperAdmin}
+        onClose={() => setAddOpen(false)}
+        onAdded={() => queryClient.invalidateQueries({ queryKey: ["allowed-admins"] })}
+      />
+
+      <RemoveConfirmDialog
+        open={!!removeTarget}
+        name={removeTarget?.name ?? ""}
+        onCancel={() => setRemoveTarget(null)}
+        onConfirm={() => removeMutation.mutate()}
+        isPending={removeMutation.isPending}
+      />
+    </>
+  );
+}
+
+// ── Riders Tab ────────────────────────────────────────────────────────────────
+
+function RidersTab() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [search, setSearch] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<AllowedRiderEntry | null>(null);
+
+  const { data: riders = [], isLoading } = useQuery({
+    queryKey: ["allowed-riders"],
+    queryFn: listAllowedRiders,
+  });
+
+  const { data: warehouses = [] } = useQuery({
+    queryKey: ["warehouses"],
+    queryFn: getWarehouses,
+  });
+
+  const warehouseMap = Object.fromEntries(warehouses.map((w) => [w.warehouseId, w.displayName]));
+
+  const removeMutation = useMutation({
+    mutationFn: () => removeAllowedRider(removeTarget!.phoneNumber),
+    onSuccess: () => {
+      toast({ title: "Rider removed" });
+      setRemoveTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["allowed-riders"] });
+    },
+    onError: () => toast({ title: "Failed to remove", variant: "destructive" }),
+  });
+
+  const filtered = filterBySearch(riders, search);
+
+  return (
+    <>
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search riders…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 rounded-xl"
+            />
+          </div>
+          <Button onClick={() => setAddOpen(true)} className="rounded-xl">
+            <UserPlus className="w-4 h-4 mr-2" />
+            Add Rider
+          </Button>
+        </div>
+
+        {isLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border/50 overflow-hidden">
+            <div className="px-4 py-2.5 bg-muted/30 border-b border-border/50 text-xs text-muted-foreground font-medium">
+              {filtered.length} rider{filtered.length !== 1 ? "s" : ""}
+            </div>
+            {filtered.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-10">No riders found.</p>
+            ) : (
+              <div className="divide-y divide-border/40">
+                {filtered.map((rider) => (
+                  <div key={rider.id} className="flex items-center justify-between px-4 py-3.5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center">
+                        <Bike className="w-4 h-4 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm text-foreground">{rider.name}</p>
+                        <p className="text-xs text-muted-foreground">{rider.phoneNumber}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      {rider.warehouseId && (
+                        <span className="text-xs text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full hidden sm:block">
+                          {warehouseMap[rider.warehouseId] ?? rider.warehouseId}
+                        </span>
+                      )}
+                      <p className="text-xs text-muted-foreground hidden md:block">Added {fmtDate(rider.createdAt)}</p>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="w-8 h-8 text-red-400 hover:text-red-600 hover:bg-red-50"
+                        onClick={() => setRemoveTarget(rider)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <AddRiderDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onAdded={() => queryClient.invalidateQueries({ queryKey: ["allowed-riders"] })}
+      />
+
+      <RemoveConfirmDialog
+        open={!!removeTarget}
+        name={removeTarget?.name ?? ""}
+        onCancel={() => setRemoveTarget(null)}
+        onConfirm={() => removeMutation.mutate()}
+        isPending={removeMutation.isPending}
+      />
+    </>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+
+export default function Permissions() {
+  const { data: isSuperAdmin = false } = useQuery({
+    queryKey: ["is-super-admin"],
+    queryFn: checkSuperAdmin,
+    staleTime: 5 * 60_000,
+  });
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6 pb-12">
+      <PageHeader
+        title="Permissions"
+        subtitle={
+          isSuperAdmin
+            ? "Manage who can access the Admin and Rider apps."
+            : "Manage who can access the Rider app."
+        }
+      />
+
+      <Tabs defaultValue="riders">
+        <TabsList className="mb-6">
+          <TabsTrigger value="admins" className="flex items-center gap-2">
+            <Shield className="w-4 h-4" />
+            Admins
+          </TabsTrigger>
+          <TabsTrigger value="riders" className="flex items-center gap-2">
+            <Bike className="w-4 h-4" />
+            Riders
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="admins" className="mt-0">
+          <AdminsTab isSuperAdmin={isSuperAdmin} />
+        </TabsContent>
+
+        <TabsContent value="riders" className="mt-0">
+          <RidersTab />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

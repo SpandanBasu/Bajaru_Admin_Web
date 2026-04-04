@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormField } from "@/components/shared/FormField";
 import { SectionDivider } from "@/components/shared/SectionDivider";
-import { ImageUploadZone } from "@/components/shared/ImageUploadZone";
 import { TagInput } from "@/components/shared/TagInput";
 import { ImageProcessingPanel } from "./ImageProcessingPanel";
 import type { PendingImages } from "./ImageProcessingPanel";
@@ -19,8 +18,8 @@ import type { Product } from "@/lib/types";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-const PRODUCT_TYPES = ["Vegetable", "Fish", "Meat"] as const;
-const PRODUCT_CATEGORIES = ["Leafy Greens", "Fruits", "Root Veggies", "Exotics"] as const;
+const PRODUCT_TYPES = ["vegetable", "fish", "meat"] as const;
+const PRODUCT_CATEGORIES = ["leafyGreen", "fruit", "root", "exotic"] as const;
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
 
@@ -49,10 +48,9 @@ interface ProductEditDialogProps {
   updateField: <K extends keyof Product>(key: K, value: Product[K]) => void;
   updateAttribute: (key: string, value: string) => void;
   removeAttribute: (key: string) => void;
-  // Edit mode: adds URLs directly to the product's imageUrls list
-  onImagesUploaded: (urls: string[]) => void;
+  // Existing images management (edit mode)
   onRemoveImage: (index: number) => void;
-  // New product mode: holds processed blobs until confirmed save uploads them
+  // Pending processed images (both new and edit modes):
   pendingImages: PendingImages | null;
   onImagesProcessed: (images: PendingImages) => void;
   onClearImages: () => void;
@@ -71,7 +69,6 @@ export function ProductEditDialog({
   updateField,
   updateAttribute,
   removeAttribute,
-  onImagesUploaded,
   onRemoveImage,
   pendingImages,
   onImagesProcessed,
@@ -310,38 +307,34 @@ export function ProductEditDialog({
 
               {/* ── Media ── */}
               <SectionDivider>Media</SectionDivider>
-              {isNewProduct ? (
-                /* New product: process locally → upload on confirm */
-                <ImageProcessingPanel
-                  current={pendingImages}
-                  onProcessed={onImagesProcessed}
-                  onClear={onClearImages}
-                />
-              ) : (
-                /* Edit mode: add image URLs directly */
-                <>
-                  <ImageUploadZone onFilesAdded={onImagesUploaded} multiple />
-                  {editingProduct.imageUrls.length > 0 && (
-                    <div className="flex gap-2 flex-wrap">
-                      {editingProduct.imageUrls.map((url, i) => (
-                        <div key={i} className="relative group/img">
-                          <img
-                            src={url}
-                            alt=""
-                            className="w-16 h-16 rounded-xl object-cover border border-border"
-                          />
-                          <button
-                            onClick={() => onRemoveImage(i)}
-                            className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity shadow"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
+
+              {/* Existing images (edit mode only) — remove individually */}
+              {!isNewProduct && editingProduct.imageUrls.length > 0 && (
+                <div className="flex gap-2 flex-wrap">
+                  {editingProduct.imageUrls.map((url, i) => (
+                    <div key={i} className="relative group/img">
+                      <img
+                        src={url}
+                        alt=""
+                        className="w-16 h-16 rounded-xl object-cover border border-border"
+                      />
+                      <button
+                        onClick={() => onRemoveImage(i)}
+                        className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity shadow"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
                     </div>
-                  )}
-                </>
+                  ))}
+                </div>
               )}
+
+              {/* Process and add new images (both new and edit modes) */}
+              <ImageProcessingPanel
+                current={pendingImages}
+                onProcessed={onImagesProcessed}
+                onClear={onClearImages}
+              />
 
               {/* ── Image Color ── */}
               <FormField label="Image Color">
