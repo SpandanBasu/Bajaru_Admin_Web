@@ -14,13 +14,12 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import {
-  searchCustomers, getCustomerDetail, getCustomerOrders, postCustomerRefund,
+  searchCustomers, getCustomerDetail, getCustomerOrders, postCustomerRefund, postWalletCredit,
 } from "@/lib/api/adminApi";
 import type { CustomerSummary, CustomerDetail, AdminCustomerOrder } from "@/lib/api/adminApi";
 import {
-  Search, User, Phone, Mail, Calendar, Wallet, MapPin, Package,
-  BadgeIndianRupee, CreditCard, RefreshCw, ChevronRight, RotateCcw,
-  Star,
+  Search, User, Phone, Mail, Calendar, Wallet, MapPin,
+  RefreshCw, ChevronRight, RotateCcw, Star, PlusCircle,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -53,6 +52,82 @@ const STATUS_LABEL: Record<string, string> = {
   CONFIRMED: "Pending", OUT_FOR_DELIVERY: "Out for Delivery",
   DELIVERED: "Delivered", CANCELLED: "Cancelled", REJECTED: "Rejected",
 };
+
+// ── Wallet Credit Dialog ──────────────────────────────────────────────────────
+
+interface WalletCreditDialogProps {
+  open: boolean;
+  customerId: string;
+  customerName: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function WalletCreditDialog({ open, customerId, customerName, onClose, onSuccess }: WalletCreditDialogProps) {
+  const { toast } = useToast();
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+
+  useEffect(() => { if (!open) { setAmount(""); setReason(""); } }, [open]);
+
+  const mutation = useMutation({
+    mutationFn: () => postWalletCredit(customerId, parseFloat(amount), reason.trim()),
+    onSuccess: () => {
+      toast({ title: "Wallet credited", description: `₹${parseFloat(amount).toFixed(2)} added to ${customerName}'s wallet.` });
+      onSuccess();
+      onClose();
+    },
+    onError: () => toast({ title: "Credit failed", variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Add Manual Wallet Credit</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <Label>Customer</Label>
+            <p className="text-sm font-medium text-foreground mt-0.5">{customerName}</p>
+          </div>
+          <div>
+            <Label htmlFor="credit-amount">Amount (₹)</Label>
+            <Input
+              id="credit-amount"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="credit-reason">Reason</Label>
+            <Input
+              id="credit-reason"
+              placeholder="e.g. Compensation for late delivery"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button
+            disabled={!amount || parseFloat(amount) <= 0 || !reason.trim() || mutation.isPending}
+            onClick={() => mutation.mutate()}
+          >
+            {mutation.isPending ? "Processing…" : "Add Credit"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // ── Refund Dialog ─────────────────────────────────────────────────────────────
 
@@ -219,6 +294,7 @@ interface CustomerSheetProps {
 function CustomerSheet({ customerId, onClose }: CustomerSheetProps) {
   const queryClient = useQueryClient();
   const [refundOrder, setRefundOrder] = useState<AdminCustomerOrder | null>(null);
+  const [walletCreditOpen, setWalletCreditOpen] = useState(false);
   const [moreOrdersPage, setMoreOrdersPage] = useState(1);
   const [extraOrders, setExtraOrders] = useState<AdminCustomerOrder[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -310,6 +386,17 @@ function CustomerSheet({ customerId, onClose }: CustomerSheetProps) {
                         <p className="text-2xl font-bold text-primary">{fmtRupees(detail.walletBalance)}</p>
                       </div>
                     </div>
+
+                    {/* Manual wallet credit */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full rounded-xl border-dashed text-muted-foreground hover:text-foreground h-9"
+                      onClick={() => setWalletCreditOpen(true)}
+                    >
+                      <PlusCircle className="w-4 h-4 mr-2" />
+                      Add Manual Wallet Credit
+                    </Button>
 
                     <SectionDivider>Contact</SectionDivider>
                     <div className="rounded-xl border border-border/50 bg-card p-4 space-y-2">
@@ -427,6 +514,16 @@ function CustomerSheet({ customerId, onClose }: CustomerSheetProps) {
           order={refundOrder}
           customerId={detail.id}
           onClose={() => setRefundOrder(null)}
+          onSuccess={() => queryClient.invalidateQueries({ queryKey: ["customer-detail", customerId] })}
+        />
+      )}
+
+      {detail && (
+        <WalletCreditDialog
+          open={walletCreditOpen}
+          customerId={detail.id}
+          customerName={detail.name}
+          onClose={() => setWalletCreditOpen(false)}
           onSuccess={() => queryClient.invalidateQueries({ queryKey: ["customer-detail", customerId] })}
         />
       )}

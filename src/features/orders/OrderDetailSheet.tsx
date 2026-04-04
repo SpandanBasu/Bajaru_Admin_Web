@@ -1,14 +1,21 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SectionDivider } from "@/components/shared/SectionDivider";
 import { OrderStatusBadge, PaymentBadge } from "./OrderStatusBadge";
-import { getDeliveryDetail } from "@/lib/api/adminApi";
+import { getDeliveryDetail, postCustomerRefund } from "@/lib/api/adminApi";
+import { useToast } from "@/hooks/use-toast";
 import {
   Phone, MapPin, ExternalLink, User, Clock, Ruler,
-  Package, AlertCircle, Image, CreditCard, Star,
+  Package, AlertCircle, CreditCard, RotateCcw, CheckCircle2,
 } from "lucide-react";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -76,6 +83,92 @@ function DetailSkeleton() {
   );
 }
 
+// ─── Inline refund dialog ─────────────────────────────────────────────────────
+
+interface OrderRefundDialogProps {
+  open: boolean;
+  orderId: string;
+  customerId: string;
+  orderTotal: number;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function OrderRefundDialog({ open, orderId, customerId, orderTotal, onClose, onSuccess }: OrderRefundDialogProps) {
+  const { toast } = useToast();
+  const [amount, setAmount] = useState(orderTotal.toFixed(2));
+  const [destination, setDestination] = useState<"WALLET" | "ORIGINAL">("WALLET");
+
+  useEffect(() => { setAmount(orderTotal.toFixed(2)); }, [orderTotal]);
+
+  const mutation = useMutation({
+    mutationFn: () => postCustomerRefund(customerId, orderId, parseFloat(amount), destination),
+    onSuccess: () => {
+      toast({ title: "Refund initiated", description: "The refund has been processed." });
+      onSuccess();
+      onClose();
+    },
+    onError: () => toast({ title: "Refund failed", variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-sm rounded-2xl">
+        <DialogHeader>
+          <DialogTitle>Initiate Refund</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <Label>Order</Label>
+            <p className="text-sm font-mono text-muted-foreground mt-0.5">
+              #{orderId.replace(/-/g, "").slice(0, 8).toUpperCase()}
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="order-refund-amount">Amount (₹)</Label>
+            <Input
+              id="order-refund-amount"
+              type="number"
+              min="0"
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="mt-1 rounded-xl"
+            />
+          </div>
+          <div>
+            <Label>Refund to</Label>
+            <RadioGroup
+              value={destination}
+              onValueChange={(v) => setDestination(v as "WALLET" | "ORIGINAL")}
+              className="mt-2 space-y-2"
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="WALLET" id="or-dest-wallet" />
+                <Label htmlFor="or-dest-wallet">Bajaru Wallet</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="ORIGINAL" id="or-dest-original" />
+                <Label htmlFor="or-dest-original">Original Payment Method</Label>
+              </div>
+            </RadioGroup>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} className="rounded-xl">Cancel</Button>
+          <Button
+            disabled={!amount || parseFloat(amount) <= 0 || mutation.isPending}
+            onClick={() => mutation.mutate()}
+            className="rounded-xl"
+          >
+            {mutation.isPending ? "Processing…" : "Issue Refund"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main sheet ───────────────────────────────────────────────────────────────
 
 interface OrderDetailSheetProps {
@@ -84,6 +177,9 @@ interface OrderDetailSheetProps {
 }
 
 export function OrderDetailSheet({ orderId, onClose }: OrderDetailSheetProps) {
+  const queryClient = useQueryClient();
+  const [showRefundDialog, setShowRefundDialog] = useState(false);
+
   const { data: order, isLoading } = useQuery({
     queryKey: ["delivery-detail", orderId],
     queryFn: () => getDeliveryDetail(orderId!),
@@ -92,6 +188,7 @@ export function OrderDetailSheet({ orderId, onClose }: OrderDetailSheetProps) {
   });
 
   return (
+    <>
     <Sheet open={!!orderId} onOpenChange={(open) => !open && onClose()}>
       <SheetContent side="right" className="w-full sm:max-w-xl p-0 flex flex-col">
 
@@ -268,6 +365,73 @@ export function OrderDetailSheet({ orderId, onClose }: OrderDetailSheetProps) {
                 </>
               )}
 
+              {/* ── Refund ── */}
+              {(order.status === "CANCELLED" || order.status === "DELIVERED") && (
+                <>
+                  <SectionDivider>Refund</SectionDivider>
+                  {order.refundStatus ? (
+                    <div className={`rounded-xl border p-4 flex items-start gap-3 ${
+                      order.refundStatus === "COMPLETED"
+                        ? "border-green-200 bg-green-50"
+                        : order.refundStatus === "FAILED"
+                        ? "border-red-200 bg-red-50"
+                        : "border-amber-200 bg-amber-50"
+                    }`}>
+                      {order.refundStatus === "COMPLETED"
+                        ? <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
+                        : order.refundStatus === "FAILED"
+                        ? <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                        : <RotateCcw className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      }
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-foreground">
+                            Refund {order.refundStatus.toLowerCase()}
+                          </p>
+                          {order.refundAmount != null && (
+                            <span className="text-sm font-bold text-primary">₹{order.refundAmount.toFixed(2)}</span>
+                          )}
+                        </div>
+                        {order.refundInitiatedAt && (
+                          <p className="text-xs text-muted-foreground">
+                            Initiated {fmtDateTime(order.refundInitiatedAt)}
+                          </p>
+                        )}
+                        {order.refundCompletedAt && (
+                          <p className="text-xs text-muted-foreground">
+                            Completed {fmtDateTime(order.refundCompletedAt)}
+                          </p>
+                        )}
+                        {(order.refundStatus === "FAILED" || order.refundStatus === "PENDING") && order.customerId && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="mt-2 h-7 text-xs rounded-lg"
+                            onClick={() => setShowRefundDialog(true)}
+                          >
+                            <RotateCcw className="w-3 h-3 mr-1" />
+                            Retry Refund
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ) : order.customerId ? (
+                    <div className="flex items-center justify-between rounded-xl border border-border/50 bg-card p-4">
+                      <p className="text-sm text-muted-foreground">No refund initiated yet.</p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs rounded-lg"
+                        onClick={() => setShowRefundDialog(true)}
+                      >
+                        <RotateCcw className="w-3 h-3 mr-1" />
+                        Initiate Refund
+                      </Button>
+                    </div>
+                  ) : null}
+                </>
+              )}
+
               {/* ── Proof of Delivery ── */}
               {order.proofImageUrl && (
                 <>
@@ -287,5 +451,17 @@ export function OrderDetailSheet({ orderId, onClose }: OrderDetailSheetProps) {
         </ScrollArea>
       </SheetContent>
     </Sheet>
+
+    {order && order.customerId && showRefundDialog && (
+      <OrderRefundDialog
+        open={showRefundDialog}
+        orderId={order.id}
+        customerId={order.customerId}
+        orderTotal={order.finalTotal}
+        onClose={() => setShowRefundDialog(false)}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["delivery-detail", orderId] })}
+      />
+    )}
+    </>
   );
 }

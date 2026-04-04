@@ -523,6 +523,7 @@ export interface AdminDeliveryItem {
 
 export interface AdminDeliveryDetail {
   id: string;
+  customerId: string;
   customerName: string;
   phone: string;
   fullAddress: string;
@@ -552,6 +553,25 @@ export interface AdminDeliveryDetail {
   rejectionReason: string | null;
   rejectedAt: string | null;
   deliveryDate: string | null;
+  refundStatus: string | null;
+  refundAmount: number | null;
+  refundInitiatedAt: string | null;
+  refundCompletedAt: string | null;
+}
+
+export interface AdminRatingItem {
+  orderId: string;
+  customerName: string;
+  rating: number | null;
+  feedback: string | null;
+  deliveredAt: string | null;
+}
+
+export interface AdminRatingsPage {
+  content: AdminRatingItem[];
+  page: number;
+  hasMore: boolean;
+  total: number;
 }
 
 interface AdminDeliveryPageResponse {
@@ -680,6 +700,21 @@ export async function postCustomerRefund(
   destination: "WALLET" | "ORIGINAL",
 ): Promise<void> {
   await adminApi.post(`/admin/customers/${userId}/refund`, { orderId, amount, destination });
+}
+
+export async function postWalletCredit(
+  userId: string,
+  amount: number,
+  reason: string,
+): Promise<void> {
+  await adminApi.post(`/admin/customers/${userId}/wallet-credit`, { amount, reason });
+}
+
+export async function getAdminRatings(page = 0, size = 50): Promise<AdminRatingsPage> {
+  const res = await adminApi.get<ApiResponse<AdminRatingsPage>>("/admin/ratings", {
+    params: { page, size },
+  });
+  return res.data.data;
 }
 
 // ── Access Control ────────────────────────────────────────────────────────────
