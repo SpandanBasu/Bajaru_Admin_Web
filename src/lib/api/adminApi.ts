@@ -710,9 +710,21 @@ export async function postWalletCredit(
   await adminApi.post(`/admin/customers/${userId}/wallet-credit`, { amount, reason });
 }
 
-export async function getAdminRatings(page = 0, size = 50): Promise<AdminRatingsPage> {
+export interface AdminRatingsFilter {
+  maxRating?: number;      // show only ratings ≤ this value (e.g. 2 → 1★ and 2★)
+  hasFeedback?: boolean;   // true = only ratings with written feedback
+  sort?: "recent" | "oldest" | "lowest" | "highest";
+}
+
+export async function getAdminRatings(page = 0, size = 20, filter: AdminRatingsFilter = {}): Promise<AdminRatingsPage> {
   const res = await adminApi.get<ApiResponse<AdminRatingsPage>>("/admin/ratings", {
-    params: { page, size },
+    params: {
+      page,
+      size,
+      ...(filter.maxRating !== undefined ? { maxRating: filter.maxRating } : {}),
+      ...(filter.hasFeedback ? { hasFeedback: "true" } : {}),
+      ...(filter.sort && filter.sort !== "recent" ? { sort: filter.sort } : {}),
+    },
   });
   return res.data.data;
 }
