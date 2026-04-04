@@ -335,11 +335,11 @@ function CustomerSheet({ customerId, onClose }: CustomerSheetProps) {
                       )}
                     </div>
 
-                    {detail.savedAddresses.length > 0 && (
+                    {(detail.savedAddresses ?? []).length > 0 && (
                       <>
                         <SectionDivider>Saved Addresses</SectionDivider>
                         <div className="space-y-2">
-                          {detail.savedAddresses.map((addr, i) => (
+                          {(detail.savedAddresses ?? []).map((addr, i) => (
                             <div key={i} className="rounded-xl border border-border/50 bg-card p-3 flex items-start gap-3">
                               <MapPin className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
                               <div>
@@ -389,12 +389,12 @@ function CustomerSheet({ customerId, onClose }: CustomerSheetProps) {
                         <p className="text-xl font-bold text-primary">{fmtRupees(detail.walletBalance)}</p>
                       </div>
                     </div>
-                    {detail.transactions.length === 0 ? (
+                    {(detail.transactions ?? []).length === 0 ? (
                       <p className="text-sm text-center text-muted-foreground py-8">No transactions found.</p>
                     ) : (
                       <div className="rounded-xl border border-border/50 overflow-hidden">
                         <div className="divide-y divide-border/40">
-                          {detail.transactions.map((txn, i) => (
+                          {(detail.transactions ?? []).map((txn, i) => (
                             <div key={i} className="px-4 py-3 flex items-center justify-between">
                               <div>
                                 <p className="text-xs font-mono text-muted-foreground">{txn.txnId}</p>

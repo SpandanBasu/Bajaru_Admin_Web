@@ -10,9 +10,9 @@ import { processProductImageToSize } from "@/lib/imageProcessing";
 export const IMAGE_CATEGORIES = [
   { value: "exotics", label: "Exotics" },
   { value: "fruits", label: "Fruits" },
-  { value: "leafy", label: "Leafy Greens" },
+  { value: "leafy-greens", label: "Leafy Greens" },
   { value: "root-veggies", label: "Root Veggies" },
-  { value: "others", label: "Others" },
+  { value: "regulars", label: "Regulars" },
 ] as const;
 
 export type ImageCategory = (typeof IMAGE_CATEGORIES)[number]["value"];
@@ -245,8 +245,9 @@ function SlotCard({ slot, onFile, onSizeChange, onCompress, onRemove }: SlotCard
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
 export function ImageProcessingPanel({ current, onProcessed, onClear }: ImageProcessingPanelProps) {
-  const [slots, setSlots] = useState<ImageSlot[]>(() => [makeSlot(800), makeSlot(200)]);
-  const [category, setCategory] = useState<ImageCategory>("others");
+  // Thumbnail (200 px) is always slot 0 — initialise in correct order.
+  const [slots, setSlots] = useState<ImageSlot[]>(() => [makeSlot(200), makeSlot(800)]);
+  const [category, setCategory] = useState<ImageCategory>("regulars");
 
   // Always-fresh ref so callbacks never have stale closure over slots
   const slotsRef = useRef(slots);
@@ -371,17 +372,30 @@ export function ImageProcessingPanel({ current, onProcessed, onClear }: ImagePro
         </div>
       )}
 
-      {/* Slot grid */}
+      {/* Slot grid — thumbnails (200 px) always rendered first / leftmost */}
       <div className="grid grid-cols-2 gap-3">
-        {slots.map((slot) => (
-          <SlotCard
-            key={slot.id}
-            slot={slot}
-            onFile={handleFile}
-            onSizeChange={handleSizeChange}
-            onCompress={handleCompress}
-            onRemove={handleRemove}
-          />
+        {[...slots].sort((a, b) => a.size - b.size).map((slot, displayIndex) => (
+          <div key={slot.id} className="space-y-1">
+            {/* Index badge so the user knows which position each image gets in the DB */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold bg-primary/10 text-primary rounded-full px-2 py-0.5">
+                index {displayIndex}
+              </span>
+              {slot.size === 200 && (
+                <span className="text-[10px] text-muted-foreground font-medium">thumbnail</span>
+              )}
+              {slot.size === 800 && (
+                <span className="text-[10px] text-muted-foreground font-medium">detail</span>
+              )}
+            </div>
+            <SlotCard
+              slot={slot}
+              onFile={handleFile}
+              onSizeChange={handleSizeChange}
+              onCompress={handleCompress}
+              onRemove={handleRemove}
+            />
+          </div>
         ))}
       </div>
 

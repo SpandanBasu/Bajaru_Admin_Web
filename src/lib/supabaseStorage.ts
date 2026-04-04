@@ -46,7 +46,9 @@ async function uploadBlob(blob: Blob, storagePath: string): Promise<string> {
  *   200×200 slots → thumbnails/{category}/{slug}-thumbnail-{n}.webp
  *   800×800 slots → details/{category}/{slug}-detail-{n}.webp
  *
- * Returns public URLs in the same order as the input slots.
+ * ORDERING GUARANTEE: thumbnails (200 px) are ALWAYS uploaded first and their
+ * URLs appear first in the returned array.  This ensures imageUrls[0] is always
+ * the thumbnail, regardless of what order the user added slots in the UI.
  */
 export async function uploadProductImages(
   slots: ProcessedSlot[],
@@ -55,21 +57,34 @@ export async function uploadProductImages(
 ): Promise<string[]> {
   const slug = slugify(productName);
 
-  // Track separate counters per size so each gets a unique filename
+  // Sort: 200-px thumbnails first, 800-px details after.
+  const sorted = [...slots].sort((a, b) => a.size - b.size);
+
+  // Track separate counters per size so each gets a unique filename.
   const sizeCounters: Record<number, number> = {};
 
-  const uploadTasks = slots.map((slot) => {
+  const uploadTasks = sorted.map((slot) => {
     const n = sizeCounters[slot.size] ?? 0;
     sizeCounters[slot.size] = n + 1;
 
     const folder = slot.size === 200 ? "thumbnails" : "details";
     const suffix = slot.size === 200 ? "thumbnail" : "detail";
-    // Use index suffix only when there is more than one of the same size
+    // Use index suffix only when there is more than one of the same size.
     const indexSuffix = n > 0 ? `-${n}` : "";
     const path = `${folder}/${category}/${slug}-${suffix}${indexSuffix}.webp`;
 
     return uploadBlob(slot.blob, path);
   });
 
+  // URLs are returned in sorted order: thumbnails first, then details.
   return Promise.all(uploadTasks);
+}
+
+/**
+ * Given the original slot list and the uploaded URL list (both already sorted
+ * thumbnail-first by uploadProductImages), returns the thumbnail count so
+ * callers can split the array correctly when merging with existing image URLs.
+ */
+export function thumbnailCount(slots: ProcessedSlot[]): number {
+  return slots.filter((s) => s.size === 200).length;
 }

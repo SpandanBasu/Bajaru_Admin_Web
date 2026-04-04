@@ -62,7 +62,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     searchTags: ["carrot", "gajar"],
   },
   {
-    id: "7", name: "Green Spinach", localName: "", description: "Fresh spinach leaves, rich in iron.", type: "vegetable", category: "leafy",
+    id: "7", name: "Green Spinach", localName: "", description: "Fresh spinach leaves, rich in iron.", type: "vegetable", category: "leafyGreens",
     isVeg: true, unitWeight: "250 gm", basePrice: 20, mrp: 20, price: 20, stock: 30,
     imageUrls: ["https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=500&h=500&fit=crop"],
     imageUrl: "https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=500&h=500&fit=crop",

@@ -17,7 +17,19 @@ import Riders from "@/pages/riders";
 import SignIn from "@/pages/sign-in";
 import { setLogoutHandler } from "@/lib/api/adminApi";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Data is considered fresh for 10 minutes — no refetch while navigating
+      staleTime: 10 * 60 * 1000,
+      // Keep unused cached data in memory for 30 minutes
+      gcTime: 30 * 60 * 1000,
+      // One retry on transient network errors, no exponential back-off delay
+      retry: 1,
+      retryDelay: 1_000,
+    },
+  },
+});
 
 function Router() {
   const { isAuthenticated, isRestoring, signOut } = useAppStore();

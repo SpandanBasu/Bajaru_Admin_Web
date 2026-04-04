@@ -23,6 +23,7 @@ const PRODUCT_CATEGORIES = ["leafyGreen", "fruit", "root", "exotic"] as const;
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
 
+/** Extract the RGB hex string (#rrggbb) from an ARGB integer. */
 function colorIntToHex(val: number): string {
   const r = (val >> 16) & 0xff;
   const g = (val >> 8) & 0xff;
@@ -30,11 +31,27 @@ function colorIntToHex(val: number): string {
   return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
-function hexToColorInt(hex: string): number {
+/** Extract the alpha byte (0–255) from an ARGB integer. */
+function colorIntToAlpha255(val: number): number {
+  // Use >>> 0 to treat as unsigned before shifting
+  return (val >>> 24) & 0xff;
+}
+
+/** Build an ARGB integer from an RGB hex string and an alpha (0–255). */
+function buildColorInt(hex: string, alpha255: number): number {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
-  return (((0xff << 24) | (r << 16) | (g << 8) | b) >>> 0);
+  return (((alpha255 & 0xff) << 24) | (r << 16) | (g << 8) | b) >>> 0;
+}
+
+/** CSS rgba() string for live preview. */
+function colorIntToRgba(val: number): string {
+  const a = (val >>> 24) & 0xff;
+  const r = (val >> 16) & 0xff;
+  const g = (val >> 8) & 0xff;
+  const b = val & 0xff;
+  return `rgba(${r},${g},${b},${(a / 255).toFixed(3)})`;
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -337,26 +354,122 @@ export function ProductEditDialog({
               />
 
               {/* ── Image Color ── */}
-              <FormField label="Image Color">
-                <div className="flex items-center gap-3">
-                  <label className="relative cursor-pointer shrink-0">
-                    <div
-                      className="w-10 h-10 rounded-xl border-2 border-border shadow-sm hover:scale-105 transition-transform"
-                      style={{ backgroundColor: colorIntToHex(editingProduct.imageColorValue) }}
-                    />
-                    <input
-                      ref={colorInputRef}
-                      type="color"
-                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-                      value={colorIntToHex(editingProduct.imageColorValue)}
-                      onChange={(e) => updateField("imageColorValue", hexToColorInt(e.target.value))}
-                    />
-                  </label>
-                  <div className="flex-1 rounded-xl bg-secondary/50 border border-border/50 h-10 flex flex-col justify-center px-3">
-                    <span className="text-xs font-mono text-foreground">{colorIntToHex(editingProduct.imageColorValue).toUpperCase()}</span>
-                    <span className="text-[10px] font-mono text-muted-foreground">{editingProduct.imageColorValue}</span>
-                  </div>
-                </div>
+              <FormField label="Image Background Color">
+                {(() => {
+                  const hex   = colorIntToHex(editingProduct.imageColorValue);
+                  const a255  = colorIntToAlpha255(editingProduct.imageColorValue);
+                  // If alpha was never set (stored as 0 = fully transparent), treat it as fully opaque
+                  const alpha = a255 === 0 ? 255 : a255;
+                  const pct   = Math.round((alpha / 255) * 100);
+
+                  return (
+                    <div className="space-y-3">
+                      {/* Row 1: swatch + picker + hex label */}
+                      <div className="flex items-center gap-3">
+                        {/* Clickable color swatch — opens native picker */}
+                        <label className="relative cursor-pointer shrink-0">
+                          {/* Checkerboard base so transparency is visible */}
+                          <div
+                            className="w-10 h-10 rounded-xl border-2 border-border shadow-sm hover:scale-105 transition-transform overflow-hidden"
+                            style={{
+                              backgroundImage:
+                                "linear-gradient(45deg,#ccc 25%,transparent 25%)," +
+                                "linear-gradient(-45deg,#ccc 25%,transparent 25%)," +
+                                "linear-gradient(45deg,transparent 75%,#ccc 75%)," +
+                                "linear-gradient(-45deg,transparent 75%,#ccc 75%)",
+                              backgroundSize: "8px 8px",
+                              backgroundPosition: "0 0,0 4px,4px -4px,-4px 0",
+                            }}
+                          >
+                            <div
+                              className="w-full h-full"
+                              style={{ backgroundColor: colorIntToRgba(editingProduct.imageColorValue === 0 ? buildColorInt(hex, 255) : editingProduct.imageColorValue) }}
+                            />
+                          </div>
+                          <input
+                            ref={colorInputRef}
+                            type="color"
+                            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                            value={hex}
+                            onChange={(e) =>
+                              updateField("imageColorValue", buildColorInt(e.target.value, alpha))
+                            }
+                          />
+                        </label>
+
+                        {/* Hex + alpha readout */}
+                        <div className="flex-1 rounded-xl bg-secondary/50 border border-border/50 h-10 flex items-center gap-3 px-3">
+                          <span className="text-xs font-mono text-foreground">{hex.toUpperCase()}</span>
+                          <span className="text-xs text-muted-foreground">·</span>
+                          <span className="text-xs font-mono text-foreground">{pct}% opacity</span>
+                        </div>
+                      </div>
+
+                      {/* Row 2: opacity slider */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>Opacity</span>
+                          <span className="font-mono font-semibold text-foreground">{pct}%</span>
+                        </div>
+                        {/* Gradient track so user can see the color fading */}
+                        <div
+                          className="relative h-4 rounded-full overflow-hidden border border-border/50"
+                          style={{
+                            backgroundImage:
+                              "linear-gradient(45deg,#ccc 25%,transparent 25%)," +
+                              "linear-gradient(-45deg,#ccc 25%,transparent 25%)," +
+                              "linear-gradient(45deg,transparent 75%,#ccc 75%)," +
+                              "linear-gradient(-45deg,transparent 75%,#ccc 75%)",
+                            backgroundSize: "8px 8px",
+                            backgroundPosition: "0 0,0 4px,4px -4px,-4px 0",
+                          }}
+                        >
+                          <div
+                            className="absolute inset-0 rounded-full"
+                            style={{
+                              background: `linear-gradient(to right, rgba(0,0,0,0), ${hex})`,
+                            }}
+                          />
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={pct}
+                            onChange={(e) => {
+                              const newPct = parseInt(e.target.value, 10);
+                              const newAlpha255 = Math.round((newPct / 100) * 255);
+                              updateField("imageColorValue", buildColorInt(hex, newAlpha255));
+                            }}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          />
+                        </div>
+                        {/* Quick-pick opacity presets */}
+                        <div className="flex gap-1.5 flex-wrap mt-1">
+                          {[5, 10, 15, 20, 30, 50, 75, 100].map((p) => (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() =>
+                                updateField(
+                                  "imageColorValue",
+                                  buildColorInt(hex, Math.round((p / 100) * 255)),
+                                )
+                              }
+                              className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors ${
+                                pct === p
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-secondary/60 text-muted-foreground border-border/50 hover:bg-secondary"
+                              }`}
+                            >
+                              {p}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </FormField>
 
               {/* ── Tags ── */}

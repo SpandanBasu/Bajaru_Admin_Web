@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, Plus, Package, Warehouse as WarehouseIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ import {
   updateProduct,
   upsertInventory,
 } from "@/lib/api/adminApi";
-import { uploadProductImages } from "@/lib/supabaseStorage";
+import { uploadProductImages, thumbnailCount } from "@/lib/supabaseStorage";
 import type { Product } from "@/lib/types";
 import type {
   WarehouseInventoryItem,
@@ -28,6 +28,12 @@ import type {
   UpsertInventoryPayload,
 } from "@/lib/api/adminApi";
 import type { FieldChange } from "@/features/products/ChangeSummaryDialog";
+import { makeLocalCache, CACHE_TTL_1H } from "@/lib/localQueryCache";
+import type { Warehouse } from "@/lib/api/adminApi";
+
+// Per-warehouse inventory cache — 1 hour TTL (products rarely change mid-shift)
+// Keyed per warehouse so switching warehouses never shows stale stock from another.
+const warehouseListCache = makeLocalCache<Warehouse[]>("warehouses", CACHE_TTL_1H);
 import type { PendingImages } from "@/features/products/ImageProcessingPanel";
 
 // ─── Pure helpers ──────────────────────────────────────────────────────────────
@@ -193,10 +199,17 @@ export default function Products() {
   // Processed image blobs for new product creation (held until confirmed save)
   const [pendingImages, setPendingImages] = useState<PendingImages | null>(null);
 
-  // ── Warehouses ──
+  // ── Warehouses (cached 1 h — the list almost never changes) ──
   const { data: warehouses = [] } = useQuery({
     queryKey: ["warehouses"],
-    queryFn: getWarehouses,
+    queryFn: async () => {
+      const data = await getWarehouses();
+      warehouseListCache.write(data);
+      return data;
+    },
+    initialData: warehouseListCache.read() ?? undefined,
+    initialDataUpdatedAt: warehouseListCache.savedAt() ?? undefined,
+    staleTime: CACHE_TTL_1H,
   });
 
   useEffect(() => {
@@ -207,11 +220,24 @@ export default function Products() {
 
   const selectedWarehouse = warehouses.find((w) => w.warehouseId === selectedWarehouseId);
 
-  // ── Inventory list ──
+  // Per-warehouse inventory cache — built lazily so the key is stable
+  const inventoryCache = useMemo(
+    () => makeLocalCache<WarehouseInventoryItem[]>(`inventory_${selectedWarehouseId}`, CACHE_TTL_1H),
+    [selectedWarehouseId],
+  );
+
+  // ── Inventory list (cached 1 h — price/stock refreshes after save anyway) ──
   const { data: inventoryItems = [], isLoading } = useQuery({
     queryKey: ["inventory", selectedWarehouseId],
-    queryFn: () => getInventoryByWarehouse(selectedWarehouseId),
+    queryFn: async () => {
+      const data = await getInventoryByWarehouse(selectedWarehouseId);
+      inventoryCache.write(data);
+      return data;
+    },
     enabled: !!selectedWarehouseId,
+    initialData: selectedWarehouseId ? (inventoryCache.read() ?? undefined) : undefined,
+    initialDataUpdatedAt: selectedWarehouseId ? (inventoryCache.savedAt() ?? undefined) : undefined,
+    staleTime: CACHE_TTL_1H,
   });
 
   const products: Product[] = inventoryItems.map(toProduct);
@@ -328,11 +354,16 @@ export default function Products() {
       // upsert inventory using the real id the backend assigned
       await upsertMutation.mutateAsync({ ...inventoryPayload, productId: created.id });
     } else {
-      // Upload any newly processed images and merge with existing imageUrls
+      // Upload any newly processed images and merge with existing imageUrls.
+      // Rule: thumbnail (200 px) always at index 0; details follow.
+      // uploadProductImages already returns thumbnails first (sorted internally).
       let finalCatalogDiff = catalogDiff;
       if (pendingImages && pendingImages.slots.length > 0) {
         const uploadedUrls = await uploadProductImages(pendingImages.slots, p.name, pendingImages.category);
-        finalCatalogDiff = { ...catalogDiff, imageUrls: [...p.imageUrls, ...uploadedUrls] };
+        const thumbs = uploadedUrls.slice(0, thumbnailCount(pendingImages.slots));
+        const details = uploadedUrls.slice(thumbnailCount(pendingImages.slots));
+        // New thumbnails → front · existing URLs → middle · new details → end
+        finalCatalogDiff = { ...catalogDiff, imageUrls: [...thumbs, ...p.imageUrls, ...details] };
       }
       if (Object.keys(finalCatalogDiff).length > 0) {
         await updateMutation.mutateAsync({ id: p.id, payload: finalCatalogDiff });
@@ -340,6 +371,8 @@ export default function Products() {
       await upsertMutation.mutateAsync(inventoryPayload);
     }
 
+    // Bust the localStorage cache so the next page-open fetches fresh inventory
+    inventoryCache.clear();
     await queryClient.invalidateQueries({ queryKey: ["inventory", selectedWarehouseId] });
     setPendingConfirm(null);
     clearPendingImages();
