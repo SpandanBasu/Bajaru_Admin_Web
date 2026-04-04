@@ -44,6 +44,8 @@ interface ImageProcessingPanelProps {
   current: PendingImages | null;
   onProcessed: (images: PendingImages) => void;
   onClear: () => void;
+  /** Fires true when any slot has a file picked but not yet compressed. */
+  onUncompressedChange?: (hasUncompressed: boolean) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -244,7 +246,7 @@ function SlotCard({ slot, onFile, onSizeChange, onCompress, onRemove }: SlotCard
 
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
-export function ImageProcessingPanel({ current, onProcessed, onClear }: ImageProcessingPanelProps) {
+export function ImageProcessingPanel({ current, onProcessed, onClear, onUncompressedChange }: ImageProcessingPanelProps) {
   // Thumbnail (200 px) is always slot 0 — initialise in correct order.
   const [slots, setSlots] = useState<ImageSlot[]>(() => [makeSlot(200), makeSlot(800)]);
   const [category, setCategory] = useState<ImageCategory>("regulars");
@@ -264,8 +266,13 @@ export function ImageProcessingPanel({ current, onProcessed, onClear }: ImagePro
       } else {
         onProcessed({ slots: ready.map((s) => ({ blob: s.blob, preview: s.preview, size: s.size })), category: cat });
       }
+      // Notify parent if any slot has a file selected but isn't compressed yet
+      const hasUncompressed = updatedSlots.some(
+        (s) => s.file !== null && s.status !== "ready" && s.status !== "compressing",
+      );
+      onUncompressedChange?.(hasUncompressed);
     },
-    [onProcessed, onClear],
+    [onProcessed, onClear, onUncompressedChange],
   );
 
   const handleCategoryChange = (value: ImageCategory) => {

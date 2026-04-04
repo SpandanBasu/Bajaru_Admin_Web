@@ -310,6 +310,19 @@ export default function Products() {
     const catalogChanges = toCatalogChanges(catalogDiff, base);
     const inventoryChanges = toInventoryChanges(p, base);
 
+    // Pending images are stored separately from the product editor (they're uploaded
+    // on confirmed save, not reflected in p.imageUrls yet). Add them to the review
+    // so the user can see that new images will be uploaded.
+    if (pendingImages && pendingImages.slots.length > 0) {
+      const newCount = pendingImages.slots.length;
+      const existingCount = p.imageUrls.length;
+      catalogChanges.push({
+        label: "Images",
+        oldValue: existingCount > 0 ? `${existingCount} image(s)` : "(none)",
+        newValue: `${existingCount + newCount} image(s) (+${newCount} new will be uploaded)`,
+      });
+    }
+
     setPendingConfirm({ catalogDiff, inventoryPayload, catalogChanges, inventoryChanges });
   };
 

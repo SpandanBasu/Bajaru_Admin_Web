@@ -98,6 +98,9 @@ export function ProductEditDialog({
   const [newAttrKey, setNewAttrKey] = useState("");
   const [newAttrVal, setNewAttrVal] = useState("");
 
+  // True when any image slot has a file picked but hasn't been compressed yet
+  const [hasUncompressedImages, setHasUncompressedImages] = useState(false);
+
   // Product ID validation (new product only)
   type IdStatus = "idle" | "checking" | "available" | "taken" | "invalid";
   const [idStatus, setIdStatus] = useState<IdStatus>("idle");
@@ -133,6 +136,7 @@ export function ProductEditDialog({
       setNewAttrKey("");
       setNewAttrVal("");
       setIdStatus("idle");
+      setHasUncompressedImages(false);
     }
   }, [open]);
 
@@ -351,6 +355,7 @@ export function ProductEditDialog({
                 current={pendingImages}
                 onProcessed={onImagesProcessed}
                 onClear={onClearImages}
+                onUncompressedChange={setHasUncompressedImages}
               />
 
               {/* ── Image Color ── */}
@@ -575,12 +580,18 @@ export function ProductEditDialog({
         )}
 
         {/* ── Footer ── */}
-        <div className="px-6 py-4 border-t border-border/50 bg-background">
+        <div className="px-6 py-4 border-t border-border/50 bg-background space-y-2">
+          {hasUncompressedImages && (
+            <p className="text-xs text-amber-600 flex items-center gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              Click <strong>Compress</strong> on each image slot before saving — uncompressed images will not be uploaded.
+            </p>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)} className="rounded-xl">
               Cancel
             </Button>
-            <Button onClick={onSave} className="rounded-xl shadow-lg shadow-primary/20">
+            <Button onClick={onSave} disabled={hasUncompressedImages} className="rounded-xl shadow-lg shadow-primary/20">
               {isNewProduct ? "Review & Add" : "Review Changes"}
             </Button>
           </DialogFooter>
