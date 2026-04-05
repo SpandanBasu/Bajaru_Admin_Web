@@ -20,10 +20,6 @@ function fmtDate(iso: string | null | undefined) {
   });
 }
 
-function shortId(id: string) {
-  return "#" + id.replace(/-/g, "").slice(0, 8).toUpperCase();
-}
-
 // ─── Star display ─────────────────────────────────────────────────────────────
 
 function StarRow({ rating, size = "sm" }: { rating: number | null; size?: "sm" | "md" }) {
@@ -59,7 +55,7 @@ function RatingCard({ item }: { item: AdminRatingItem }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-semibold text-sm text-foreground truncate">{item.customerName}</p>
-          <p className="text-xs font-mono text-muted-foreground mt-0.5">{shortId(item.orderId)}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{item.phone ?? "—"}</p>
         </div>
         <div className="text-right shrink-0 space-y-1">
           <StarRow rating={item.rating} />

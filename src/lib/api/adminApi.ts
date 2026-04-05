@@ -562,6 +562,7 @@ export interface AdminDeliveryDetail {
 export interface AdminRatingItem {
   orderId: string;
   customerName: string;
+  phone: string | null;
   rating: number | null;
   feedback: string | null;
   deliveredAt: string | null;
