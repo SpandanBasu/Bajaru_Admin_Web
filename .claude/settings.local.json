@@ -8,7 +8,9 @@
       "Bash(npm install:*)",
       "Bash(go get:*)",
       "Bash(go build:*)",
-      "Bash(echo \"Exit code: $?\")"
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(grep:*)",
+      "Bash(bash:*)"
     ]
   }
 }
