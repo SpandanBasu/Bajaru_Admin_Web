@@ -10,7 +10,8 @@
       "Bash(go build:*)",
       "Bash(echo \"Exit code: $?\")",
       "Bash(grep:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

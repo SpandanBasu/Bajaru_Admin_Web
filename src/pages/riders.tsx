@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SectionDivider } from "@/components/shared/SectionDivider";
@@ -86,7 +87,7 @@ function RiderDetailSheet({ rider, onClose }: RiderDetailSheetProps) {
 
   return (
     <Sheet open={!!rider} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-lg p-0 flex flex-col">
+      <SheetContent side="right" className="sm:max-w-lg p-0 flex flex-col">
         <SheetHeader className="px-6 pt-6 pb-4 border-b border-border/50 shrink-0">
           {!rider ? null : (
             <div className="flex items-center gap-4">
@@ -281,10 +282,16 @@ export default function Riders() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const today = new Date().toISOString().split("T")[0];
+  const [location] = useLocation();
 
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("");
   const [selectedRider, setSelectedRider] = useState<AdminRider | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  // Close the detail sheet when navigating away so its overlay doesn't block page transitions
+  useEffect(() => {
+    setSelectedRider(null);
+  }, [location]);
 
   const { data: warehouses = [] } = useQuery({
     queryKey: ["warehouses"],
