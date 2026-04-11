@@ -33,7 +33,7 @@ function truncate(s: string, max = 60): string {
   return s.length > max ? s.slice(0, max) + "…" : s;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Component  ────────────────────────────────────────────────────────────────
 
 export function ChangeSummaryDialog({
   open,
