@@ -612,7 +612,7 @@ function AdminsTab({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
 // ── Riders Tab ────────────────────────────────────────────────────────────────
 
-function RidersTab() {
+function RidersTab({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
@@ -657,11 +657,20 @@ function RidersTab() {
               className="pl-9 rounded-xl"
             />
           </div>
-          <Button onClick={() => setAddOpen(true)} className="rounded-xl">
-            <UserPlus className="w-4 h-4 mr-2" />
-            Add Rider
-          </Button>
+          {isSuperAdmin && (
+            <Button onClick={() => setAddOpen(true)} className="rounded-xl">
+              <UserPlus className="w-4 h-4 mr-2" />
+              Add Rider
+            </Button>
+          )}
         </div>
+
+        {!isSuperAdmin && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 flex items-start gap-2">
+            <Shield className="w-4 h-4 shrink-0 mt-0.5" />
+            Only super admins can add or remove riders. You can still generate login links for existing riders.
+          </div>
+        )}
 
         {isLoading ? (
           <div className="space-y-2">
@@ -710,15 +719,17 @@ function RidersTab() {
                         <span className="hidden sm:inline">Get Login Link</span>
                       </Button>
 
-                      {/* Remove */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="w-8 h-8 text-red-400 hover:text-red-600 hover:bg-red-50"
-                        onClick={() => setRemoveTarget(rider)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      {/* Remove — super admins only */}
+                      {isSuperAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-8 h-8 text-red-400 hover:text-red-600 hover:bg-red-50"
+                          onClick={() => setRemoveTarget(rider)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -788,7 +799,7 @@ export default function Permissions() {
         </TabsContent>
 
         <TabsContent value="riders" className="mt-0">
-          <RidersTab />
+          <RidersTab isSuperAdmin={isSuperAdmin} />
         </TabsContent>
       </Tabs>
     </div>
