@@ -13,10 +13,11 @@ import { useToast } from "@/hooks/use-toast";
 import {
   checkSuperAdmin, listAllowedAdmins, addAllowedAdmin, removeAllowedAdmin,
   listAllowedRiders, addAllowedRider, removeAllowedRider, getWarehouses,
+  generateRiderMagicLink,
 } from "@/lib/api/adminApi";
-import type { AllowedAdminEntry, AllowedRiderEntry } from "@/lib/api/adminApi";
+import type { AllowedAdminEntry, AllowedRiderEntry, MagicLinkResult } from "@/lib/api/adminApi";
 import {
-  Shield, ShieldCheck, UserPlus, Trash2, Search, Bike, AlertTriangle,
+  Shield, ShieldCheck, UserPlus, Trash2, Search, Bike, AlertTriangle, Link2, Copy, CheckCheck, Clock,
 } from "lucide-react";
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
@@ -33,6 +34,162 @@ function filterBySearch<T extends { name: string; phoneNumber: string }>(items: 
   if (!q) return items;
   const lower = q.toLowerCase();
   return items.filter((i) => i.name.toLowerCase().includes(lower) || i.phoneNumber.includes(lower));
+}
+
+// ── Magic Link Display ────────────────────────────────────────────────────────
+// Reused both in AddRiderDialog (post-add state) and MagicLinkDialog.
+
+function MagicLinkBox({ result, riderName }: { result: MagicLinkResult; riderName: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(result.magicLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Fallback for browsers that block clipboard without user interaction
+      const ta = document.createElement("textarea");
+      ta.value = result.magicLink;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
+  const hours = Math.round(result.expiresIn / 3600);
+
+  return (
+    <div className="rounded-xl border border-green-200 bg-green-50 p-4 space-y-3">
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+          <Link2 className="w-4 h-4 text-green-600" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-green-800">Login link ready</p>
+          <p className="text-xs text-green-600">Send this to <strong>{riderName}</strong> on WhatsApp.</p>
+        </div>
+      </div>
+
+      {/* Link box */}
+      <div className="flex items-stretch gap-2">
+        <div className="flex-1 min-w-0 rounded-lg border border-green-200 bg-white px-3 py-2">
+          <p className="text-xs font-mono text-green-800 break-all leading-relaxed select-all">
+            {result.magicLink}
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="icon"
+          className={`shrink-0 h-auto border-green-200 transition-colors ${
+            copied
+              ? "bg-green-600 text-white border-green-600 hover:bg-green-600"
+              : "bg-white text-green-700 hover:bg-green-50"
+          }`}
+          onClick={handleCopy}
+          title="Copy link"
+        >
+          {copied ? <CheckCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+        </Button>
+      </div>
+
+      {/* Expiry note */}
+      <div className="flex items-center gap-1.5 text-xs text-green-600">
+        <Clock className="w-3.5 h-3.5 shrink-0" />
+        Expires in {hours} hour{hours !== 1 ? "s" : ""}. One-time use — generates a new one if needed.
+      </div>
+    </div>
+  );
+}
+
+// ── Magic Link Dialog (for existing riders) ───────────────────────────────────
+
+function MagicLinkDialog({
+  rider, open, onClose,
+}: { rider: AllowedRiderEntry | null; open: boolean; onClose: () => void }) {
+  const { toast } = useToast();
+
+  const mutation = useMutation({
+    mutationFn: () => generateRiderMagicLink(rider!.phoneNumber),
+    onError: () => {
+      toast({ title: "Failed to generate link", description: "Please try again.", variant: "destructive" });
+    },
+  });
+
+  // Auto-generate when the dialog opens
+  const handleOpen = (v: boolean) => {
+    if (!v) { onClose(); return; }
+  };
+
+  // Trigger generation when rider changes and dialog becomes visible
+  const wasOpen = open && rider !== null;
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={handleOpen}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Link2 className="w-4 h-4 text-primary" />
+            Login Link — {rider?.name}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="py-2 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Generate a one-time magic login link for{" "}
+            <strong>{rider?.name}</strong> ({rider?.phoneNumber}).
+            Send it via WhatsApp — the rider taps it to sign in instantly.
+          </p>
+
+          {mutation.data ? (
+            <MagicLinkBox result={mutation.data} riderName={rider?.name ?? ""} />
+          ) : (
+            <Button
+              className="w-full"
+              disabled={mutation.isPending}
+              onClick={() => mutation.mutate()}
+            >
+              {mutation.isPending ? (
+                <>
+                  <span className="mr-2 h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin inline-block" />
+                  Generating…
+                </>
+              ) : (
+                <>
+                  <Link2 className="w-4 h-4 mr-2" />
+                  Generate Login Link
+                </>
+              )}
+            </Button>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Close</Button>
+          {mutation.data && (
+            <Button
+              variant="ghost"
+              onClick={() => { mutation.reset(); mutation.mutate(); }}
+              disabled={mutation.isPending}
+              className="text-muted-foreground"
+            >
+              Generate New Link
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // ── Add Admin Dialog ──────────────────────────────────────────────────────────
@@ -116,6 +273,13 @@ function AddAdminDialog({
 }
 
 // ── Add Rider Dialog ──────────────────────────────────────────────────────────
+//
+// Three internal states:
+//   "form"    → rider details input
+//   "linking" → rider added, auto-generating magic link
+//   "done"    → magic link ready to copy
+
+type AddRiderStep = "form" | "linking" | "done";
 
 function AddRiderDialog({
   open, onClose, onAdded,
@@ -124,19 +288,28 @@ function AddRiderDialog({
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
+  const [step, setStep] = useState<AddRiderStep>("form");
+  const [magicLink, setMagicLink] = useState<MagicLinkResult | null>(null);
 
   const { data: warehouses = [] } = useQuery({
     queryKey: ["warehouses"],
     queryFn: getWarehouses,
   });
 
-  const mutation = useMutation({
+  const reset = () => {
+    setPhone(""); setName(""); setWarehouseId("");
+    setStep("form"); setMagicLink(null);
+  };
+
+  const handleClose = () => { reset(); onClose(); };
+
+  // Step 1: add rider to whitelist
+  const addMutation = useMutation({
     mutationFn: () => addAllowedRider(phone.trim(), name.trim(), warehouseId),
     onSuccess: () => {
-      toast({ title: "Rider added", description: `${name} can now log in to the Rider app.` });
-      setPhone(""); setName(""); setWarehouseId("");
-      onAdded();
-      onClose();
+      onAdded(); // refresh the riders list in the background
+      setStep("linking");
+      linkMutation.mutate(); // immediately kick off link generation
     },
     onError: (err: unknown) => {
       const status = (err as { response?: { status?: number } }).response?.status;
@@ -148,58 +321,125 @@ function AddRiderDialog({
     },
   });
 
+  // Step 2: generate the magic link
+  const linkMutation = useMutation({
+    mutationFn: () => generateRiderMagicLink(phone.trim()),
+    onSuccess: (result) => {
+      setMagicLink(result);
+      setStep("done");
+    },
+    onError: () => {
+      // Link generation failed, but the rider was already added — close and let
+      // the admin use the per-row "Get Login Link" button instead.
+      toast({
+        title: "Rider added",
+        description: `${name} was added. Use "Get Login Link" on their row to generate a link.`,
+      });
+      handleClose();
+    },
+  });
+
+  const currentName = name.trim() || "the rider";
+
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Add Rider</DialogTitle>
+          <DialogTitle>
+            {step === "form"    ? "Add Rider"              : ""}
+            {step === "linking" ? "Adding Rider…"          : ""}
+            {step === "done"    ? "Rider Added — Share Link" : ""}
+          </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div>
-            <Label htmlFor="rider-phone">Phone Number</Label>
-            <Input
-              id="rider-phone"
-              placeholder="+91XXXXXXXXXX"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="mt-1"
-            />
+
+        {/* ── Form step ── */}
+        {step === "form" && (
+          <>
+            <div className="space-y-4 py-2">
+              <div>
+                <Label htmlFor="rider-phone">Phone Number</Label>
+                <Input
+                  id="rider-phone"
+                  placeholder="+91XXXXXXXXXX"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="rider-name">Name</Label>
+                <Input
+                  id="rider-name"
+                  placeholder="Full name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>Warehouse</Label>
+                <Select value={warehouseId} onValueChange={setWarehouseId}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select warehouse" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {warehouses.map((w) => (
+                      <SelectItem key={w.warehouseId} value={w.warehouseId}>
+                        {w.displayName} — {w.city}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={handleClose}>Cancel</Button>
+              <Button
+                disabled={!phone.trim() || !name.trim() || !warehouseId || addMutation.isPending}
+                onClick={() => addMutation.mutate()}
+              >
+                {addMutation.isPending ? "Adding…" : "Add Rider"}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+
+        {/* ── Generating link step ── */}
+        {step === "linking" && (
+          <div className="py-6 flex flex-col items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <span className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin inline-block" />
+            </div>
+            <div className="text-center space-y-1">
+              <p className="font-medium text-sm text-foreground">Generating login link…</p>
+              <p className="text-xs text-muted-foreground">{currentName} has been added. Creating their login link.</p>
+            </div>
           </div>
-          <div>
-            <Label htmlFor="rider-name">Name</Label>
-            <Input
-              id="rider-name"
-              placeholder="Full name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label>Warehouse</Label>
-            <Select value={warehouseId} onValueChange={setWarehouseId}>
-              <SelectTrigger className="mt-1">
-                <SelectValue placeholder="Select warehouse" />
-              </SelectTrigger>
-              <SelectContent>
-                {warehouses.map((w) => (
-                  <SelectItem key={w.warehouseId} value={w.warehouseId}>
-                    {w.displayName} — {w.city}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button
-            disabled={!phone.trim() || !name.trim() || !warehouseId || mutation.isPending}
-            onClick={() => mutation.mutate()}
-          >
-            {mutation.isPending ? "Adding…" : "Add Rider"}
-          </Button>
-        </DialogFooter>
+        )}
+
+        {/* ── Done step — magic link ready ── */}
+        {step === "done" && magicLink && (
+          <>
+            <div className="py-2 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                <strong>{currentName}</strong> has been added to the rider whitelist.
+                Copy the link below and send it on WhatsApp — they tap it to log in instantly.
+              </p>
+              <MagicLinkBox result={magicLink} riderName={currentName} />
+            </div>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button
+                variant="ghost"
+                className="text-muted-foreground"
+                onClick={() => { linkMutation.reset(); linkMutation.mutate(); }}
+                disabled={linkMutation.isPending}
+              >
+                Generate New Link
+              </Button>
+              <Button onClick={handleClose}>Done</Button>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -370,6 +610,7 @@ function RidersTab() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<AllowedRiderEntry | null>(null);
+  const [linkTarget, setLinkTarget] = useState<AllowedRiderEntry | null>(null);
 
   const { data: riders = [], isLoading } = useQuery({
     queryKey: ["allowed-riders"],
@@ -429,6 +670,7 @@ function RidersTab() {
               <div className="divide-y divide-border/40">
                 {filtered.map((rider) => (
                   <div key={rider.id} className="flex items-center justify-between px-4 py-3.5">
+                    {/* Left: avatar + name */}
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center">
                         <Bike className="w-4 h-4 text-blue-600" />
@@ -438,13 +680,29 @@ function RidersTab() {
                         <p className="text-xs text-muted-foreground">{rider.phoneNumber}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
+
+                    {/* Right: warehouse badge + date + actions */}
+                    <div className="flex items-center gap-2 shrink-0">
                       {rider.warehouseId && (
                         <span className="text-xs text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full hidden sm:block">
                           {warehouseMap[rider.warehouseId] ?? rider.warehouseId}
                         </span>
                       )}
                       <p className="text-xs text-muted-foreground hidden md:block">Added {fmtDate(rider.createdAt)}</p>
+
+                      {/* Get Login Link */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2.5 text-xs gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                        onClick={() => setLinkTarget(rider)}
+                        title="Generate login link"
+                      >
+                        <Link2 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Get Login Link</span>
+                      </Button>
+
+                      {/* Remove */}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -466,6 +724,12 @@ function RidersTab() {
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onAdded={() => queryClient.invalidateQueries({ queryKey: ["allowed-riders"] })}
+      />
+
+      <MagicLinkDialog
+        rider={linkTarget}
+        open={!!linkTarget}
+        onClose={() => setLinkTarget(null)}
       />
 
       <RemoveConfirmDialog
