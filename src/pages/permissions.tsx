@@ -38,19 +38,26 @@ function filterBySearch<T extends { name: string; phoneNumber: string }>(items: 
 
 // ── Magic Link Display ────────────────────────────────────────────────────────
 // Reused both in AddRiderDialog (post-add state) and MagicLinkDialog.
+// The Copy button copies the full WhatsApp-ready greeting message, not just the URL.
+
+function buildGreeting(riderName: string, magicLink: string): string {
+  return `Hi ${riderName}! 👋\n\nPlease use the link below to log in to the Bajaru Delivery rider app:\n\n${magicLink}\n\nThis link can only be used once and expires in 24 hours. Tap it on your phone to sign in instantly.`;
+}
 
 function MagicLinkBox({ result, riderName }: { result: MagicLinkResult; riderName: string }) {
   const [copied, setCopied] = useState(false);
 
+  const greeting = buildGreeting(riderName, result.magicLink);
+
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(result.magicLink);
+      await navigator.clipboard.writeText(greeting);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch {
       // Fallback for browsers that block clipboard without user interaction
       const ta = document.createElement("textarea");
-      ta.value = result.magicLink;
+      ta.value = greeting;
       ta.style.position = "fixed";
       ta.style.opacity = "0";
       document.body.appendChild(ta);
@@ -74,36 +81,37 @@ function MagicLinkBox({ result, riderName }: { result: MagicLinkResult; riderNam
         </div>
         <div>
           <p className="text-sm font-semibold text-green-800">Login link ready</p>
-          <p className="text-xs text-green-600">Send this to <strong>{riderName}</strong> on WhatsApp.</p>
+          <p className="text-xs text-green-600">Copy the message below and send to <strong>{riderName}</strong>.</p>
         </div>
       </div>
 
-      {/* Link box */}
-      <div className="flex items-stretch gap-2">
-        <div className="flex-1 min-w-0 rounded-lg border border-green-200 bg-white px-3 py-2">
-          <p className="text-xs font-mono text-green-800 break-all leading-relaxed select-all">
-            {result.magicLink}
-          </p>
+      {/* Message preview — what gets copied */}
+      <div className="rounded-lg border border-green-200 bg-white px-3 py-2.5 space-y-1">
+        <p className="text-[10px] font-medium text-green-600 uppercase tracking-wide mb-1.5">Message preview</p>
+        <p className="text-xs text-gray-700 whitespace-pre-line leading-relaxed select-all">
+          {greeting}
+        </p>
+      </div>
+
+      {/* Copy button + expiry */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-1.5 text-xs text-green-600">
+          <Clock className="w-3.5 h-3.5 shrink-0" />
+          Expires in {hours} hour{hours !== 1 ? "s" : ""} · one-time use
         </div>
         <Button
           variant="outline"
-          size="icon"
-          className={`shrink-0 h-auto border-green-200 transition-colors ${
+          size="sm"
+          className={`shrink-0 gap-1.5 border-green-200 transition-colors ${
             copied
               ? "bg-green-600 text-white border-green-600 hover:bg-green-600"
               : "bg-white text-green-700 hover:bg-green-50"
           }`}
           onClick={handleCopy}
-          title="Copy link"
         >
-          {copied ? <CheckCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+          {copied ? <CheckCheck className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+          {copied ? "Copied!" : "Copy Message"}
         </Button>
-      </div>
-
-      {/* Expiry note */}
-      <div className="flex items-center gap-1.5 text-xs text-green-600">
-        <Clock className="w-3.5 h-3.5 shrink-0" />
-        Expires in {hours} hour{hours !== 1 ? "s" : ""}. One-time use — generates a new one if needed.
       </div>
     </div>
   );
