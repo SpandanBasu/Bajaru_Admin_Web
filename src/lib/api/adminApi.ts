@@ -799,6 +799,23 @@ export async function removeAllowedRider(phoneNumber: string): Promise<void> {
   await adminApi.delete(`/admin/access/riders/${encodeURIComponent(phoneNumber)}`);
 }
 
+export interface MagicLinkResult {
+  magicLink: string;  // full deep-link URL: https://riders.bajaru.com/login?token=...
+  expiresIn: number;  // seconds (86400 = 24 h)
+}
+
+/**
+ * Generates a one-time magic-link login URL for a rider.
+ * The token is stored in Redis for 24 hours. Each call produces a new token;
+ * the previous one is not invalidated, but will naturally expire.
+ */
+export async function generateRiderMagicLink(phoneNumber: string): Promise<MagicLinkResult> {
+  const res = await adminApi.post<ApiResponse<MagicLinkResult>>(
+    `/admin/access/riders/${encodeURIComponent(phoneNumber)}/magic-link`,
+  );
+  return res.data.data;
+}
+
 // ── Riders ────────────────────────────────────────────────────────────────────
 
 export interface AdminRider {

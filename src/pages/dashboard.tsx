@@ -31,7 +31,7 @@ const PHASE_LABEL: Record<string, string> = {
   dispatch: "Dispatch",
 };
 
-// ── Stats config (maps backend fields) ───────────────────────────────────────
+// ── Stats config (maps backend fields ) ───────────────────────────────────────
 
 const STATS_CONFIG: Array<{
   title: string;
