@@ -391,9 +391,24 @@ export async function updateProduct(
   return res.data.data;
 }
 
-export async function toggleProductActive(id: string): Promise<AdminProduct> {
-  const res = await adminApi.patch<ApiResponse<AdminProduct>>(
-    `/market/admin/products/${id}/toggle`,
+export async function toggleInventoryAvailability(
+  productId: string,
+  warehouseId: string,
+): Promise<boolean> {
+  const res = await adminApi.patch<ApiResponse<{ active: boolean }>>(
+    `/inventory/admin/${productId}/${warehouseId}/toggle`,
+  );
+  return res.data.data.active ?? false;
+}
+
+/**
+ * Fetch a single product from the admin catalog endpoint.
+ * Unlike getProductById (public market endpoint), this returns the product
+ * regardless of its active status — safe to use for inactive products.
+ */
+export async function getAdminProductById(id: string): Promise<AdminProduct> {
+  const res = await adminApi.get<ApiResponse<AdminProduct>>(
+    `/market/admin/products/${id}`,
   );
   return res.data.data;
 }

@@ -18,6 +18,7 @@ import {
   createProduct,
   updateProduct,
   upsertInventory,
+  toggleInventoryAvailability,
 } from "@/lib/api/adminApi";
 import { uploadProductImages, thumbnailCount } from "@/lib/supabaseStorage";
 import type { Product } from "@/lib/types";
@@ -162,6 +163,8 @@ function toCatalogChanges(
 
 function toInventoryChanges(current: Product, original: Product): FieldChange[] {
   const changes: FieldChange[] = [];
+  if (current.active !== original.active)
+    changes.push({ label: "Stock Status", oldValue: original.active ? "In Stock" : "Out of Stock", newValue: current.active ? "In Stock" : "Out of Stock" });
   if (current.mrp !== original.mrp)
     changes.push({ label: "MRP (₹)", oldValue: fmt(original.mrp), newValue: fmt(current.mrp) });
   if (current.price !== original.price)
@@ -178,6 +181,7 @@ interface PendingConfirm {
   inventoryPayload: UpsertInventoryPayload;
   catalogChanges: FieldChange[];
   inventoryChanges: FieldChange[];
+  activeChanged: boolean;
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -301,6 +305,7 @@ export default function Products() {
         inventoryPayload,
         catalogChanges: [],
         inventoryChanges: [],
+        activeChanged: false,
       });
       return;
     }
@@ -309,6 +314,7 @@ export default function Products() {
     const catalogDiff = buildCatalogDiff(p, base);
     const catalogChanges = toCatalogChanges(catalogDiff, base);
     const inventoryChanges = toInventoryChanges(p, base);
+    const activeChanged = p.active !== base.active;
 
     // Pending images are stored separately from the product editor (they're uploaded
     // on confirmed save, not reflected in p.imageUrls yet). Add them to the review
@@ -323,7 +329,7 @@ export default function Products() {
       });
     }
 
-    setPendingConfirm({ catalogDiff, inventoryPayload, catalogChanges, inventoryChanges });
+    setPendingConfirm({ catalogDiff, inventoryPayload, catalogChanges, inventoryChanges, activeChanged });
   };
 
   // ── Confirmed save: fire the actual API calls ──
@@ -382,6 +388,9 @@ export default function Products() {
         await updateMutation.mutateAsync({ id: p.id, payload: finalCatalogDiff });
       }
       await upsertMutation.mutateAsync(inventoryPayload);
+      if (pendingConfirm.activeChanged) {
+        await toggleInventoryAvailability(p.id, selectedWarehouseId);
+      }
     }
 
     // Bust the localStorage cache so the next page-open fetches fresh inventory
