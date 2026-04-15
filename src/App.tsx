@@ -39,6 +39,15 @@ function Router() {
     setLogoutHandler(signOut);
   }, [signOut]);
 
+  // Wipe the entire React Query cache when the user signs out so stale data from
+  // one session never bleeds into the next. Without this, the module-level
+  // queryClient singleton retains in-memory cache across logout/login cycles.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      queryClient.clear();
+    }
+  }, [isAuthenticated]);
+
   if (isRestoring) return null;
   if (!isAuthenticated) return <SignIn />;
 

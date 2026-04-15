@@ -403,9 +403,37 @@ export default function Products() {
       }
     }
 
-    // Bust the localStorage cache so the next page-open fetches fresh inventory
-    inventoryCache.clear();
-    await queryClient.invalidateQueries({ queryKey: ["inventory", selectedWarehouseId] });
+    // ── Cache update ──────────────────────────────────────────────────────────
+    // Directly patch the in-memory and localStorage caches with the values we
+    // just saved. This gives an instant UI update without waiting for a network
+    // round-trip and closes the staleness window that was causing edited products
+    // to disappear from the list (React Query v5 runs invalidateQueries refetches
+    // in the background — the UI re-renders before the fetch completes).
+    if (!editor.isNewProduct) {
+      const currentItems =
+        queryClient.getQueryData<WarehouseInventoryItem[]>(["inventory", selectedWarehouseId]) ?? [];
+      const patchedItems = currentItems.map((item) =>
+        item.productId !== p.id
+          ? item
+          : {
+              ...item,
+              mrp: p.mrp,
+              sellingPrice: p.price,
+              quantityAvailable: p.stock,
+              active: Boolean(p.active),
+            },
+      );
+      queryClient.setQueryData(["inventory", selectedWarehouseId], patchedItems);
+      inventoryCache.write(patchedItems);
+    } else {
+      // New product: no existing item to patch — clear and let the refetch rebuild.
+      inventoryCache.clear();
+    }
+
+    // Background refetch — non-blocking. Syncs any server-side changes (catalog
+    // fields, images, etc.) that aren't reflected in the local patch above.
+    queryClient.invalidateQueries({ queryKey: ["inventory", selectedWarehouseId] });
+
     setPendingConfirm(null);
     clearPendingImages();
     editor.setIsDialogOpen(false);
