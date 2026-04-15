@@ -11,7 +11,9 @@
       "Bash(echo \"Exit code: $?\")",
       "Bash(grep:*)",
       "Bash(bash:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(node_modules/.bin/tsc:*)"
     ]
   }
 }
