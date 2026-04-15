@@ -391,11 +391,14 @@ export async function updateProduct(
   return res.data.data;
 }
 
-export async function toggleProductActive(id: string): Promise<AdminProduct> {
-  const res = await adminApi.patch<ApiResponse<AdminProduct>>(
-    `/market/admin/products/${id}/toggle`,
+export async function toggleInventoryAvailability(
+  productId: string,
+  warehouseId: string,
+): Promise<boolean> {
+  const res = await adminApi.patch<ApiResponse<{ active: boolean }>>(
+    `/inventory/admin/${productId}/${warehouseId}/toggle`,
   );
-  return res.data.data;
+  return res.data.data.active ?? false;
 }
 
 /**
