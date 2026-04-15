@@ -387,10 +387,10 @@ export default function Products() {
       if (Object.keys(finalCatalogDiff).length > 0) {
         await updateMutation.mutateAsync({ id: p.id, payload: finalCatalogDiff });
       }
+      await upsertMutation.mutateAsync(inventoryPayload);
       if (pendingConfirm.activeChanged) {
         await toggleInventoryAvailability(p.id, selectedWarehouseId);
       }
-      await upsertMutation.mutateAsync(inventoryPayload);
     }
 
     // Bust the localStorage cache so the next page-open fetches fresh inventory
