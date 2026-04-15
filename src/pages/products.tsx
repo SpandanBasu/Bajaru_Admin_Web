@@ -13,7 +13,7 @@ import { useProductEditor } from "@/features/products/useProductEditor";
 import {
   getWarehouses,
   getInventoryByWarehouse,
-  getProductById,
+  getAdminProductById,
   checkProductIdExists,
   createProduct,
   updateProduct,
@@ -24,8 +24,8 @@ import { uploadProductImages, thumbnailCount } from "@/lib/supabaseStorage";
 import type { Product } from "@/lib/types";
 import type {
   WarehouseInventoryItem,
+  AdminProduct,
   CreateProductPayload,
-  ProductDetail,
   UpsertInventoryPayload,
 } from "@/lib/api/adminApi";
 import type { FieldChange } from "@/features/products/ChangeSummaryDialog";
@@ -75,7 +75,7 @@ function toProduct(item: WarehouseInventoryItem): Product {
 }
 
 /** Overlay all real catalog fields onto the inventory-sourced product. */
-function mergeDetail(base: Product, d: ProductDetail): Product {
+function mergeDetail(base: Product, d: AdminProduct): Product {
   return {
     ...base,
     name: d.name ?? base.name,
@@ -89,6 +89,7 @@ function mergeDetail(base: Product, d: ProductDetail): Product {
     imageUrls: d.imageUrls?.length ? d.imageUrls : base.imageUrls,
     imageColorValue: d.imageColorValue ?? base.imageColorValue,
     tags: d.tags ?? [],
+    searchTags: d.searchTags ?? [],
     rating: d.rating ?? 0,
     ratingCount: d.ratingCount ?? 0,
     attributes:
@@ -272,18 +273,14 @@ export default function Products() {
     setLoadingProductId(product.id);
     setOriginalProduct(null);
 
-    const pincode = selectedWarehouse?.servicePincodes?.[0];
     let fullProduct = product; // fallback if fetch fails
 
-    if (pincode) {
-      try {
-        const detail = await getProductById(product.id, pincode);
-        fullProduct = mergeDetail(product, detail);
-      } catch {
-        // Catalog fetch failed (e.g. product inactive or network error).
-        // Open the dialog with the inventory data we already have.
-        fullProduct = product;
-      }
+    try {
+      const detail = await getAdminProductById(product.id);
+      fullProduct = mergeDetail(product, detail);
+    } catch {
+      // Catalog fetch failed — open the dialog with the inventory data we have.
+      fullProduct = product;
     }
 
     setOriginalProduct(fullProduct);
@@ -348,7 +345,12 @@ export default function Products() {
     const p = editor.editingProduct;
     if (!p || !selectedWarehouseId || !pendingConfirm) return;
 
-    const { catalogDiff, inventoryPayload } = pendingConfirm;
+    const { catalogDiff, inventoryPayload, activeChanged } = pendingConfirm;
+
+    // Server-confirmed active state after save — used for the cache patch and the
+    // post-refetch re-apply.  Starts as the user's intended value; updated to the
+    // toggle endpoint's actual response so we never cache a state the server rejected.
+    let finalActive = Boolean(p.active);
 
     if (editor.isNewProduct) {
       // Upload images to Supabase first so we have the public URLs for the catalog
@@ -398,8 +400,10 @@ export default function Products() {
         await updateMutation.mutateAsync({ id: p.id, payload: finalCatalogDiff });
       }
       await upsertMutation.mutateAsync(inventoryPayload);
-      if (pendingConfirm.activeChanged) {
-        await toggleInventoryAvailability(p.id, selectedWarehouseId);
+      if (activeChanged) {
+        // Capture the server's confirmed new active state — don't assume the toggle
+        // succeeded or that the server's value matches the user's intent.
+        finalActive = await toggleInventoryAvailability(p.id, selectedWarehouseId);
       }
     }
 
@@ -420,7 +424,7 @@ export default function Products() {
               mrp: p.mrp,
               sellingPrice: p.price,
               quantityAvailable: p.stock,
-              active: Boolean(p.active),
+              active: finalActive,
             },
       );
       queryClient.setQueryData(["inventory", selectedWarehouseId], patchedItems);
@@ -432,7 +436,22 @@ export default function Products() {
 
     // Background refetch — non-blocking. Syncs any server-side changes (catalog
     // fields, images, etc.) that aren't reflected in the local patch above.
-    queryClient.invalidateQueries({ queryKey: ["inventory", selectedWarehouseId] });
+    //
+    // When active was toggled, re-apply finalActive after the refetch settles so
+    // the server's /by-warehouse computed column (which may derive active from qty)
+    // can't silently undo the explicit toggle the user just confirmed.
+    const warehouseId = selectedWarehouseId;
+    const productId = p.id;
+    queryClient.refetchQueries({ queryKey: ["inventory", warehouseId] }).then(() => {
+      if (!activeChanged) return;
+      const freshItems =
+        queryClient.getQueryData<WarehouseInventoryItem[]>(["inventory", warehouseId]) ?? [];
+      const reapplied = freshItems.map((item) =>
+        item.productId !== productId ? item : { ...item, active: finalActive }
+      );
+      queryClient.setQueryData(["inventory", warehouseId], reapplied);
+      inventoryCache.write(reapplied);
+    });
 
     setPendingConfirm(null);
     clearPendingImages();
