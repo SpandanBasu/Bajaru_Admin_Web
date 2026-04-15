@@ -435,6 +435,25 @@ interface AdminWarehousePage {
   nextCursor: string | null;
 }
 
+/**
+ * Normalizes a raw by-warehouse API response item to guaranteed TypeScript types.
+ *
+ * Why this exists: the backend occasionally returns booleans as integers (0/1) and
+ * numbers as strings depending on the ORM version and DB driver configuration in
+ * each environment. Normalizing here — at the HTTP boundary — means everything
+ * upstream in the application can trust the types and never needs defensive casts.
+ */
+function parseInventoryItem(item: WarehouseInventoryItem): WarehouseInventoryItem {
+  return {
+    ...item,
+    active: Boolean(item.active),
+    quantityAvailable: Number(item.quantityAvailable) || 0,
+    mrp: Number(item.mrp) || 0,
+    sellingPrice: Number(item.sellingPrice) || 0,
+    imageUrls: Array.isArray(item.imageUrls) ? item.imageUrls : [],
+  };
+}
+
 /** Fetches all inventory entries for a warehouse, following cursor pagination internally. */
 export async function getInventoryByWarehouse(warehouseId: string): Promise<WarehouseInventoryItem[]> {
   const all: WarehouseInventoryItem[] = [];
@@ -449,7 +468,7 @@ export async function getInventoryByWarehouse(warehouseId: string): Promise<Ware
       { params },
     );
     const page = res.data.data;
-    all.push(...page.content);
+    all.push(...page.content.map(parseInventoryItem));
     cursor = page.hasMore ? page.nextCursor : null;
   } while (cursor);
 

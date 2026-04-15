@@ -39,6 +39,13 @@ import type { PendingImages } from "@/features/products/ImageProcessingPanel";
 
 // ─── Pure helpers ──────────────────────────────────────────────────────────────
 
+/**
+ * Maps a normalized WarehouseInventoryItem to the domain Product type.
+ *
+ * Boolean/number coercions here are defense-in-depth: the API layer already
+ * normalizes these via parseInventoryItem, but we guard again so this function
+ * stays correct if ever called with un-normalized data in tests or future refactors.
+ */
 function toProduct(item: WarehouseInventoryItem): Product {
   return {
     id: item.productId,
@@ -49,10 +56,10 @@ function toProduct(item: WarehouseInventoryItem): Product {
     category: item.category,
     isVeg: false,
     unitWeight: item.unitWeight,
-    basePrice: item.mrp,
-    mrp: item.mrp,
-    price: item.sellingPrice,
-    stock: item.quantityAvailable,
+    basePrice: Number(item.mrp) || 0,
+    mrp: Number(item.mrp) || 0,
+    price: Number(item.sellingPrice) || 0,
+    stock: Number(item.quantityAvailable) || 0,
     imageUrls: item.imageUrls ?? [],
     imageUrl: item.imageUrls?.[0] ?? "",
     imageColorValue: 0,
@@ -61,7 +68,7 @@ function toProduct(item: WarehouseInventoryItem): Product {
     rating: 0,
     ratingCount: 0,
     attributes: { origin: "", shelfLife: "" },
-    active: item.active,
+    active: Boolean(item.active),
     createdAt: "",
     updatedAt: "",
   };
@@ -314,7 +321,10 @@ export default function Products() {
     const catalogDiff = buildCatalogDiff(p, base);
     const catalogChanges = toCatalogChanges(catalogDiff, base);
     const inventoryChanges = toInventoryChanges(p, base);
-    const activeChanged = p.active !== base.active;
+    // Use Boolean() coercion so a stray 0/1/null from any code path never
+    // produces a spurious toggle — the toggle endpoint must only fire on a
+    // deliberate user action, not a type mismatch.
+    const activeChanged = Boolean(p.active) !== Boolean(base.active);
 
     // Pending images are stored separately from the product editor (they're uploaded
     // on confirmed save, not reflected in p.imageUrls yet). Add them to the review
