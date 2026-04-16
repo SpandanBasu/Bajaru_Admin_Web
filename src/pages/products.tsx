@@ -399,7 +399,19 @@ export default function Products() {
       if (Object.keys(finalCatalogDiff).length > 0) {
         await updateMutation.mutateAsync({ id: p.id, payload: finalCatalogDiff });
       }
-      await upsertMutation.mutateAsync(inventoryPayload);
+      // Mirror the Flutter admin app: keep upsert and toggle as independent
+      // operations. The upsert endpoint may activate or deactivate the record
+      // as a side-effect (e.g. auto-activating when qty > 0), which would put
+      // the server in an unexpected state before the toggle fires and cause it
+      // to flip to the wrong value. Only call upsert when stock/price/mrp
+      // actually changed, and only call toggle when the availability flag changed.
+      const base = originalProduct ?? p;
+      const inventoryValuesChanged =
+        p.stock !== base.stock || p.mrp !== base.mrp || p.price !== base.price;
+
+      if (inventoryValuesChanged) {
+        await upsertMutation.mutateAsync(inventoryPayload);
+      }
       if (activeChanged) {
         // Capture the server's confirmed new active state — don't assume the toggle
         // succeeded or that the server's value matches the user's intent.
