@@ -78,10 +78,13 @@ function toProduct(item: WarehouseInventoryItem): Product {
 
 /** Overlay all real catalog fields onto the inventory-sourced product. */
 function mergeDetail(base: Product, d: AdminProduct): Product {
+  // The backend may return snake_case keys (search_tags, local_name) even though our
+  // TypeScript types use camelCase. There is no axios transformer, so we read both.
+  const raw = d as unknown as Record<string, unknown>;
   return {
     ...base,
     name: d.name ?? base.name,
-    localName: d.localName ?? base.localName,
+    localName: d.localName || (raw.local_name as string) || base.localName,
     description: d.description ?? "",
     type: d.type ?? "",
     category: d.category ?? base.category,
@@ -91,7 +94,10 @@ function mergeDetail(base: Product, d: AdminProduct): Product {
     imageUrls: d.imageUrls?.length ? d.imageUrls : base.imageUrls,
     imageColorValue: d.imageColorValue ?? base.imageColorValue,
     tags: d.tags ?? [],
-    searchTags: d.searchTags ?? [],
+    searchTags:
+      (Array.isArray(d.searchTags) && d.searchTags.length > 0 ? d.searchTags : null) ??
+      (Array.isArray(raw.search_tags) ? (raw.search_tags as string[]) : null) ??
+      [],
     rating: d.rating ?? 0,
     ratingCount: d.ratingCount ?? 0,
     attributes:
