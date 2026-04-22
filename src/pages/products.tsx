@@ -14,6 +14,7 @@ import {
   getWarehouses,
   getInventoryByWarehouse,
   getAdminProductById,
+  getProductById,
   checkProductIdExists,
   createProduct,
   updateProduct,
@@ -25,6 +26,7 @@ import type { Product } from "@/lib/types";
 import type {
   WarehouseInventoryItem,
   AdminProduct,
+  ProductDetail,
   CreateProductPayload,
   UpsertInventoryPayload,
 } from "@/lib/api/adminApi";
@@ -90,6 +92,34 @@ function mergeDetail(base: Product, d: AdminProduct): Product {
     imageColorValue: d.imageColorValue ?? base.imageColorValue,
     tags: d.tags ?? [],
     searchTags: d.searchTags ?? [],
+    rating: d.rating ?? 0,
+    ratingCount: d.ratingCount ?? 0,
+    attributes:
+      d.attributes && Object.keys(d.attributes).length
+        ? (d.attributes as Product["attributes"])
+        : base.attributes,
+  };
+}
+
+/**
+ * Overlay catalog fields from the public market endpoint.
+ * Same as mergeDetail but typed for ProductDetail (no searchTags field).
+ * Used as a fallback when the admin endpoint is unavailable.
+ */
+function mergePublicDetail(base: Product, d: ProductDetail): Product {
+  return {
+    ...base,
+    name: d.name ?? base.name,
+    localName: d.localName ?? base.localName,
+    description: d.description ?? "",
+    type: d.type ?? "",
+    category: d.category ?? base.category,
+    isVeg: d.isVeg ?? base.isVeg,
+    unitWeight: d.unitWeight ?? base.unitWeight,
+    basePrice: d.basePrice ?? base.basePrice,
+    imageUrls: d.imageUrls?.length ? d.imageUrls : base.imageUrls,
+    imageColorValue: d.imageColorValue ?? base.imageColorValue,
+    tags: d.tags ?? [],
     rating: d.rating ?? 0,
     ratingCount: d.ratingCount ?? 0,
     attributes:
@@ -273,14 +303,34 @@ export default function Products() {
     setLoadingProductId(product.id);
     setOriginalProduct(null);
 
-    let fullProduct = product; // fallback if fetch fails
+    let fullProduct = product; // fallback if all fetches fail
+    let adminFetchSucceeded = false;
 
+    // Primary: admin endpoint returns all fields including searchTags.
     try {
       const detail = await getAdminProductById(product.id);
-      fullProduct = mergeDetail(product, detail);
+      if (detail != null) {
+        fullProduct = mergeDetail(product, detail);
+        adminFetchSucceeded = true;
+      }
     } catch {
-      // Catalog fetch failed — open the dialog with the inventory data we have.
-      fullProduct = product;
+      // Admin endpoint failed — will try public endpoint below.
+    }
+
+    // Fallback: public endpoint returns localName, tags, attributes (not searchTags).
+    // Used when admin endpoint fails or returns null, e.g. for products that predate
+    // the admin catalog index or when the backend is partially deployed.
+    if (!adminFetchSucceeded) {
+      const pincode = selectedWarehouse?.servicePincodes?.[0];
+      if (pincode) {
+        try {
+          const publicDetail = await getProductById(product.id, pincode);
+          fullProduct = mergePublicDetail(product, publicDetail);
+        } catch {
+          // Public endpoint also failed (e.g. product inactive or network error).
+          // Open the dialog with the inventory data we already have.
+        }
+      }
     }
 
     setOriginalProduct(fullProduct);
