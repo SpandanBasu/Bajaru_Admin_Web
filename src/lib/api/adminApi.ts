@@ -408,7 +408,7 @@ export async function toggleInventoryAvailability(
  */
 export async function getAdminProductById(id: string): Promise<AdminProduct> {
   const res = await adminApi.get<ApiResponse<AdminProduct>>(
-    `/market/admin/products/${id}`,
+    `/admin/inventory/products/${id}`,
   );
   return res.data.data;
 }
