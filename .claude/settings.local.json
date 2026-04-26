@@ -14,7 +14,8 @@
       "Bash(npx tsc:*)",
       "Bash(node_modules/.bin/tsc --noEmit)",
       "Bash(node_modules/.bin/tsc:*)",
-      "Bash(git show *)"
+      "Bash(git show *)",
+      "Bash(powershell *)"
     ]
   }
 }
