@@ -234,6 +234,7 @@ export default function Products() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
+  const [stockFilter, setStockFilter] = useState<"all" | "in_stock" | "active">("all");
 
   // Tracks which product's Edit button is spinning while we fetch catalog data
   const [loadingProductId, setLoadingProductId] = useState<string | null>(null);
@@ -289,9 +290,13 @@ export default function Products() {
   });
 
   const products: Product[] = inventoryItems.map(toProduct);
-  const filteredProducts = products.filter((p) =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
+  const filteredProducts = products
+    .filter((p) => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    .filter((p) => {
+      if (stockFilter === "in_stock") return p.stock > 0;
+      if (stockFilter === "active") return p.active;
+      return true;
+    });
 
   // ── Mutations ──
   const createMutation = useMutation({ mutationFn: createProduct });
@@ -561,8 +566,8 @@ export default function Products() {
         </Button>
       </PageHeader>
 
-      {/* Warehouse selector */}
-      <div className="flex items-center gap-3">
+      {/* Warehouse selector + stock filter */}
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
           <WarehouseIcon className="w-4 h-4" />
           <span>Warehouse</span>
@@ -577,6 +582,16 @@ export default function Products() {
                 {w.displayName} — {w.city}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+        <Select value={stockFilter} onValueChange={(v) => setStockFilter(v as typeof stockFilter)}>
+          <SelectTrigger className="w-40 rounded-xl border-border/50 bg-card">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="rounded-xl">
+            <SelectItem value="all">All Products</SelectItem>
+            <SelectItem value="in_stock">In Stock</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
           </SelectContent>
         </Select>
         {selectedWarehouse && (
