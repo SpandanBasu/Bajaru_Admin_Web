@@ -1,6 +1,6 @@
 // Browser-side image processing — mirrors the Python compression script logic.
 // Produces two WebP variants from any source image:
-//   thumbnail: 200×200, near-lossless (quality=1.0)
+//   thumbnail: 400×400, near-lossless (quality=1.0)
 //   detail:    800×800, quality=0.80, white background (RGBA → RGB)
 
 export interface ProcessedImages {
@@ -78,7 +78,7 @@ function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob>
 export async function processProductImage(file: File): Promise<ProcessedImages> {
   const bitmap = await createImageBitmap(file);
 
-  const thumbCanvas = drawSquareCanvas(bitmap, 200, false);
+  const thumbCanvas = drawSquareCanvas(bitmap, 400, false);
   const detailCanvas = drawSquareCanvas(bitmap, 800, true);
 
   bitmap.close(); // free GPU memory
