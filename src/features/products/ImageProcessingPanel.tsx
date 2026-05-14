@@ -16,7 +16,7 @@ export const IMAGE_CATEGORIES = [
 ] as const;
 
 export type ImageCategory = (typeof IMAGE_CATEGORIES)[number]["value"];
-export type ImageSize = 200 | 800;
+export type ImageSize = 400 | 800;
 
 interface ImageSlot {
   id: string;
@@ -53,7 +53,7 @@ interface ImageProcessingPanelProps {
 function makeSlot(size: ImageSize = 800): ImageSlot {
   return { id: Math.random().toString(36).slice(2), file: null, rawPreview: null, blob: null, preview: null, size, status: "empty", error: null };
 }
-function qualityFor(size: ImageSize) { return size === 200 ? 1.0 : 0.8; }
+function qualityFor(size: ImageSize) { return size === 400 ? 1.0 : 0.8; }
 function whiteBgFor(size: ImageSize) { return size === 800; }
 
 // ─── Slot card ────────────────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ function SlotCard({ slot, onFile, onSizeChange, onCompress, onRemove }: SlotCard
     if (slot.status !== "compressing") inputRef.current?.click();
   };
 
-  const sizeLabel = slot.size === 200 ? "200×200 · thumbnail" : "800×800 · detail";
+  const sizeLabel = slot.size === 400 ? "400×400 · thumbnail" : "800×800 · detail";
 
   return (
     <div className="rounded-2xl border border-border/50 overflow-hidden bg-card">
@@ -98,7 +98,7 @@ function SlotCard({ slot, onFile, onSizeChange, onCompress, onRemove }: SlotCard
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="rounded-xl">
-            <SelectItem value="200">200×200 — Thumbnail (lossless)</SelectItem>
+            <SelectItem value="400">400×400 — Thumbnail (lossless)</SelectItem>
             <SelectItem value="800">800×800 — Detail (80% quality)</SelectItem>
           </SelectContent>
         </Select>
@@ -237,7 +237,7 @@ function SlotCard({ slot, onFile, onSizeChange, onCompress, onRemove }: SlotCard
 
         {/* Size/quality label */}
         <p className="text-[10px] text-muted-foreground/70 text-center">
-          {sizeLabel} · WebP · {slot.size === 200 ? "lossless" : "80% quality"}
+          {sizeLabel} · WebP · {slot.size === 400 ? "lossless" : "80% quality"}
         </p>
       </div>
     </div>
@@ -247,8 +247,8 @@ function SlotCard({ slot, onFile, onSizeChange, onCompress, onRemove }: SlotCard
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
 export function ImageProcessingPanel({ current, onProcessed, onClear, onUncompressedChange }: ImageProcessingPanelProps) {
-  // Thumbnail (200 px) is always slot 0 — initialise in correct order.
-  const [slots, setSlots] = useState<ImageSlot[]>(() => [makeSlot(200), makeSlot(800)]);
+  // Thumbnail (400 px) is always slot 0 — initialise in correct order.
+  const [slots, setSlots] = useState<ImageSlot[]>(() => [makeSlot(400), makeSlot(800)]);
   const [category, setCategory] = useState<ImageCategory>("regulars");
 
   // Always-fresh ref so callbacks never have stale closure over slots
@@ -379,7 +379,7 @@ export function ImageProcessingPanel({ current, onProcessed, onClear, onUncompre
         </div>
       )}
 
-      {/* Slot grid — thumbnails (200 px) always rendered first / leftmost */}
+      {/* Slot grid — thumbnails (400 px) always rendered first / leftmost */}
       <div className="grid grid-cols-2 gap-3">
         {[...slots].sort((a, b) => a.size - b.size).map((slot, displayIndex) => (
           <div key={slot.id} className="space-y-1">
@@ -388,7 +388,7 @@ export function ImageProcessingPanel({ current, onProcessed, onClear, onUncompre
               <span className="text-[10px] font-bold bg-primary/10 text-primary rounded-full px-2 py-0.5">
                 index {displayIndex}
               </span>
-              {slot.size === 200 && (
+              {slot.size === 400 && (
                 <span className="text-[10px] text-muted-foreground font-medium">thumbnail</span>
               )}
               {slot.size === 800 && (
