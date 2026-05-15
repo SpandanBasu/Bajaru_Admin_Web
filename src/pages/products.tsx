@@ -21,7 +21,13 @@ import {
   upsertInventory,
   toggleInventoryAvailability,
 } from "@/lib/api/adminApi";
-import { uploadProductImages, thumbnailCount } from "@/lib/supabaseStorage";
+import {
+  uploadProductImages,
+  thumbnailCount,
+  relocateProductImages,
+  deleteProductImages,
+  parseCategoryFromImageUrl,
+} from "@/lib/supabaseStorage";
 import type { Product } from "@/lib/types";
 import type {
   WarehouseInventoryItem,
@@ -37,7 +43,8 @@ import type { Warehouse } from "@/lib/api/adminApi";
 // Per-warehouse inventory cache — 1 hour TTL (products rarely change mid-shift)
 // Keyed per warehouse so switching warehouses never shows stale stock from another.
 const warehouseListCache = makeLocalCache<Warehouse[]>("warehouses", CACHE_TTL_1H);
-import type { PendingImages } from "@/features/products/ImageProcessingPanel";
+import type { PendingImages, ImageCategory } from "@/features/products/ImageProcessingPanel";
+import { IMAGE_CATEGORIES } from "@/features/products/ImageProcessingPanel";
 
 // ─── Pure helpers ──────────────────────────────────────────────────────────────
 
@@ -248,6 +255,12 @@ export default function Products() {
   // Processed image blobs for new product creation (held until confirmed save)
   const [pendingImages, setPendingImages] = useState<PendingImages | null>(null);
 
+  // Image category tracking for existing products
+  // originalImageCategory: parsed from the product's imageUrls when edit dialog opens
+  // selectedImageCategory: tracks what the user currently has selected in the panel
+  const [originalImageCategory, setOriginalImageCategory] = useState<ImageCategory>("regulars");
+  const [selectedImageCategory, setSelectedImageCategory] = useState<ImageCategory>("regulars");
+
   // ── Warehouses (cached 1 h — the list almost never changes) ──
   const { data: warehouses = [] } = useQuery({
     queryKey: ["warehouses"],
@@ -347,6 +360,11 @@ export default function Products() {
     setOriginalProduct(fullProduct);
     editor.handleEditClick(fullProduct); // opens dialog with all real fields
     setLoadingProductId(null);
+
+    // Parse image category from the first imageUrl so the panel shows the right selection
+    const detectedCategory = parseCategoryFromImageUrl(fullProduct.imageUrls[0] ?? "") ?? "regulars";
+    setOriginalImageCategory(detectedCategory);
+    setSelectedImageCategory(detectedCategory);
   };
 
   // ── "Review Changes" clicked inside dialog: compute diff and show confirmation ──
@@ -384,6 +402,22 @@ export default function Products() {
     // deliberate user action, not a type mismatch.
     const activeChanged = Boolean(p.active) !== Boolean(base.active);
 
+    // Detect image category change (even if no new images are being uploaded)
+    const imageCategoryChanged =
+      !editor.isNewProduct &&
+      selectedImageCategory !== originalImageCategory &&
+      p.imageUrls.length > 0;
+
+    if (imageCategoryChanged) {
+      const fromLabel = IMAGE_CATEGORIES.find((c) => c.value === originalImageCategory)?.label ?? originalImageCategory;
+      const toLabel = IMAGE_CATEGORIES.find((c) => c.value === selectedImageCategory)?.label ?? selectedImageCategory;
+      catalogChanges.push({
+        label: "Image Category",
+        oldValue: fromLabel,
+        newValue: `${toLabel} (existing images will be moved)`,
+      });
+    }
+
     // Pending images are stored separately from the product editor (they're uploaded
     // on confirmed save, not reflected in p.imageUrls yet). Add them to the review
     // so the user can see that new images will be uploaded.
@@ -412,6 +446,8 @@ export default function Products() {
     // post-refetch re-apply.  Starts as the user's intended value; updated to the
     // toggle endpoint's actual response so we never cache a state the server rejected.
     let finalActive = Boolean(p.active);
+    // Tracks the definitive imageUrls after any relocation/upload — used to patch the local cache.
+    let savedImageUrls = p.imageUrls;
 
     if (editor.isNewProduct) {
       // Upload images to Supabase first so we have the public URLs for the catalog
@@ -446,17 +482,37 @@ export default function Products() {
       // upsert inventory using the real id the backend assigned
       await upsertMutation.mutateAsync({ ...inventoryPayload, productId: created.id });
     } else {
-      // Upload any newly processed images and merge with existing imageUrls.
-      // Rule: thumbnail (200 px) always at index 0; details follow.
-      // uploadProductImages already returns thumbnails first (sorted internally).
       let finalCatalogDiff = catalogDiff;
+
+      // Track the working set of existing image URLs — may be updated by relocation.
+      let currentImageUrls = [...p.imageUrls];
+
+      // If the image category changed, move all existing images to the new folder.
+      const imageCategoryChanged =
+        selectedImageCategory !== originalImageCategory && currentImageUrls.length > 0;
+
+      if (imageCategoryChanged) {
+        const oldUrls = [...currentImageUrls];
+        currentImageUrls = await relocateProductImages(oldUrls, p.name, selectedImageCategory);
+        // Best-effort removal of old files — don't fail the whole save if this errors.
+        // Backend endpoint required: DELETE /admin/upload/product-images { paths: string[] }
+        deleteProductImages(oldUrls).catch(() => {});
+        finalCatalogDiff = { ...finalCatalogDiff, imageUrls: currentImageUrls };
+      }
+
+      // Upload any newly processed images and merge with the (possibly relocated) set.
+      // thumbnails (400 px) always come first; details follow.
       if (pendingImages && pendingImages.slots.length > 0) {
         const uploadedUrls = await uploadProductImages(pendingImages.slots, p.name, pendingImages.category);
         const thumbs = uploadedUrls.slice(0, thumbnailCount(pendingImages.slots));
         const details = uploadedUrls.slice(thumbnailCount(pendingImages.slots));
         // New thumbnails → front · existing URLs → middle · new details → end
-        finalCatalogDiff = { ...catalogDiff, imageUrls: [...thumbs, ...p.imageUrls, ...details] };
+        currentImageUrls = [...thumbs, ...currentImageUrls, ...details];
+        finalCatalogDiff = { ...finalCatalogDiff, imageUrls: currentImageUrls };
       }
+
+      savedImageUrls = currentImageUrls;
+
       if (Object.keys(finalCatalogDiff).length > 0) {
         await updateMutation.mutateAsync({ id: p.id, payload: finalCatalogDiff });
       }
@@ -494,6 +550,10 @@ export default function Products() {
           ? item
           : {
               ...item,
+              name: p.name,
+              localName: p.localName,
+              category: p.category,
+              imageUrls: savedImageUrls,
               mrp: p.mrp,
               sellingPrice: p.price,
               quantityAvailable: p.stock,
@@ -528,6 +588,8 @@ export default function Products() {
 
     setPendingConfirm(null);
     clearPendingImages();
+    setSelectedImageCategory("regulars");
+    setOriginalImageCategory("regulars");
     editor.setIsDialogOpen(false);
   };
 
@@ -639,7 +701,10 @@ export default function Products() {
       <ProductEditDialog
         open={editor.isDialogOpen}
         onOpenChange={(open) => {
-          if (!open) clearPendingImages();
+          if (!open) {
+            clearPendingImages();
+            setSelectedImageCategory("regulars");
+          }
           editor.setIsDialogOpen(open);
         }}
         editingProduct={editor.editingProduct}
@@ -652,6 +717,8 @@ export default function Products() {
         pendingImages={pendingImages}
         onImagesProcessed={setPendingImages}
         onClearImages={clearPendingImages}
+        originalImageCategory={originalImageCategory}
+        onImageCategoryChange={setSelectedImageCategory}
         checkIdExists={async (id) => {
           const pincode = selectedWarehouse?.servicePincodes?.[0] ?? "000000";
           return checkProductIdExists(id, pincode);

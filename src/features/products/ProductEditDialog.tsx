@@ -12,7 +12,7 @@ import { FormField } from "@/components/shared/FormField";
 import { SectionDivider } from "@/components/shared/SectionDivider";
 import { TagInput } from "@/components/shared/TagInput";
 import { ImageProcessingPanel } from "./ImageProcessingPanel";
-import type { PendingImages } from "./ImageProcessingPanel";
+import type { PendingImages, ImageCategory } from "./ImageProcessingPanel";
 import { FIXED_ATTR_KEYS } from "./useProductEditor";
 import type { Product } from "@/lib/types";
 
@@ -71,6 +71,9 @@ interface ProductEditDialogProps {
   pendingImages: PendingImages | null;
   onImagesProcessed: (images: PendingImages) => void;
   onClearImages: () => void;
+  // Image category tracking
+  originalImageCategory: ImageCategory;
+  onImageCategoryChange: (category: ImageCategory) => void;
   // New product mode: async check whether a typed ID is already taken
   checkIdExists?: (id: string) => Promise<boolean>;
 }
@@ -90,6 +93,8 @@ export function ProductEditDialog({
   pendingImages,
   onImagesProcessed,
   onClearImages,
+  originalImageCategory,
+  onImageCategoryChange,
   checkIdExists,
 }: ProductEditDialogProps) {
   const colorInputRef = useRef<HTMLInputElement>(null);
@@ -356,6 +361,8 @@ export function ProductEditDialog({
                 onProcessed={onImagesProcessed}
                 onClear={onClearImages}
                 onUncompressedChange={setHasUncompressedImages}
+                originalCategory={originalImageCategory}
+                onCategoryChange={onImageCategoryChange}
               />
 
               {/* ── Image Color ── */}
