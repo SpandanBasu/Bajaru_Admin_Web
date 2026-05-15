@@ -12,7 +12,7 @@ export const IMAGE_CATEGORIES = [
   { value: "fruits", label: "Fruits" },
   { value: "leafy-greens", label: "Leafy Greens" },
   { value: "root-veggies", label: "Root Veggies" },
-  { value: "regulars", label: "Regulars" },
+  { value: "regulars", label: "Seasonal" },
 ] as const;
 
 export type ImageCategory = (typeof IMAGE_CATEGORIES)[number]["value"];
