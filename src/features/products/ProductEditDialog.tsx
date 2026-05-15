@@ -19,7 +19,7 @@ import type { Product } from "@/lib/types";
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 const PRODUCT_TYPES = ["vegetable", "fish", "meat"] as const;
-const PRODUCT_CATEGORIES = ["leafyGreen", "fruit", "root", "exotic"] as const;
+const PRODUCT_CATEGORIES = ["leafyGreen", "fruit", "root", "exotic", "seasonal"] as const;
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
 
