@@ -143,6 +143,21 @@ function mergePublicDetail(base: Product, d: ProductDetail): Product {
 }
 
 /**
+ * Maps a product's category value to the closest image storage category.
+ * Used as a fallback when the image URL doesn't reveal where the files live
+ * (e.g. all pre-existing products whose images landed in the "regulars" folder).
+ */
+function productCategoryToImageCategory(category: string): ImageCategory {
+  switch (category) {
+    case "fruit":      return "fruits";
+    case "leafyGreen": return "leafy-greens";
+    case "root":       return "root-veggies";
+    case "exotic":     return "exotics";
+    default:           return "regulars"; // seasonal + unknown
+  }
+}
+
+/**
  * Compare current vs original and return only the fields that changed.
  * Omitted keys → backend leaves those fields untouched (pointer types stay nil).
  */
@@ -361,8 +376,16 @@ export default function Products() {
     editor.handleEditClick(fullProduct); // opens dialog with all real fields
     setLoadingProductId(null);
 
-    // Parse image category from the first imageUrl so the panel shows the right selection
-    const detectedCategory = parseCategoryFromImageUrl(fullProduct.imageUrls[0] ?? "") ?? "regulars";
+    // Determine the image category to pre-select in the panel.
+    // Prefer the category embedded in the URL when it's an explicit non-default value
+    // (meaning someone already placed images in a specific folder).
+    // Fall back to mapping from the product's own category so that e.g. a fruit product
+    // shows "Fruits" instead of "Seasonal" when images are still in the old regulars folder.
+    const urlCategory = parseCategoryFromImageUrl(fullProduct.imageUrls[0] ?? "");
+    const detectedCategory: ImageCategory =
+      urlCategory && urlCategory !== "regulars"
+        ? urlCategory
+        : productCategoryToImageCategory(fullProduct.category);
     setOriginalImageCategory(detectedCategory);
     setSelectedImageCategory(detectedCategory);
   };
