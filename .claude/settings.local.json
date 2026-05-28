@@ -18,7 +18,9 @@
       "Bash(powershell *)",
       "Bash(Get-ChildItem -Path \"C:\\\\BajaruCode\\\\Bajaru_Backend_GO\" -Force)",
       "Bash(Select-Object Name, Mode)",
-      "Bash(Format-Table -AutoSize)"
+      "Bash(Format-Table -AutoSize)",
+      "Bash(Get-ChildItem -Path \"C:\\\\BajaruCode\\\\Bajaru_Admin_Web\" -Directory)",
+      "Bash(Select-Object -First 20)"
     ]
   }
 }

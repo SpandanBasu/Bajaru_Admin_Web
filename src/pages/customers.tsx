@@ -321,7 +321,7 @@ function CustomerSheet({ customerId, onClose }: CustomerSheetProps) {
     if (!customerId || loadingMore) return;
     setLoadingMore(true);
     try {
-      const page = await getCustomerOrders(customerId, moreOrdersPage, 10);
+      const page = await getCustomerOrders(customerId, moreOrdersPage, 5);
       setExtraOrders((prev) => [...prev, ...page.content]);
       setMoreOrdersPage((p) => p + 1);
       setHasMore(page.hasMore);
