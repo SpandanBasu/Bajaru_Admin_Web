@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Upload, Loader2, X, Plus, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,10 @@ interface ImageProcessingPanelProps {
   onClear: () => void;
   /** Fires true when any slot has a file picked but not yet compressed. */
   onUncompressedChange?: (hasUncompressed: boolean) => void;
+  /** The category already stored for this product's existing images. Resets the selector when changed. */
+  originalCategory?: ImageCategory;
+  /** Fires on every category dropdown change, even when no images are pending. */
+  onCategoryChange?: (category: ImageCategory) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -246,10 +250,15 @@ function SlotCard({ slot, onFile, onSizeChange, onCompress, onRemove }: SlotCard
 
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
-export function ImageProcessingPanel({ current, onProcessed, onClear, onUncompressedChange }: ImageProcessingPanelProps) {
+export function ImageProcessingPanel({ current, onProcessed, onClear, onUncompressedChange, originalCategory, onCategoryChange }: ImageProcessingPanelProps) {
   // Thumbnail (400 px) is always slot 0 — initialise in correct order.
   const [slots, setSlots] = useState<ImageSlot[]>(() => [makeSlot(400), makeSlot(800)]);
-  const [category, setCategory] = useState<ImageCategory>("regulars");
+  const [category, setCategory] = useState<ImageCategory>(originalCategory ?? "regulars");
+
+  // Reset the category selector whenever the product being edited changes.
+  useEffect(() => {
+    setCategory(originalCategory ?? "regulars");
+  }, [originalCategory]);
 
   // Always-fresh ref so callbacks never have stale closure over slots
   const slotsRef = useRef(slots);
@@ -277,6 +286,7 @@ export function ImageProcessingPanel({ current, onProcessed, onClear, onUncompre
 
   const handleCategoryChange = (value: ImageCategory) => {
     setCategory(value);
+    onCategoryChange?.(value);
     if (current) onProcessed({ ...current, category: value });
   };
 
