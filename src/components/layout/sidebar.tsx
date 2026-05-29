@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, ShoppingBasket, Truck, ClipboardList, LogOut,
-  HeadphonesIcon, Star, Shield, Bike,
+  HeadphonesIcon, Star, Shield, Bike, BarChart3, GitCompareArrows,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 
@@ -13,6 +13,8 @@ export function Sidebar() {
     { name: "Dashboard",    href: "/",            icon: LayoutDashboard },
     { name: "Orders",       href: "/orders",       icon: ClipboardList },
     { name: "Products",     href: "/products",     icon: ShoppingBasket },
+    { name: "Price Compare", href: "/price-comparison", icon: BarChart3 },
+    { name: "Product Mapping", href: "/product-mapping", icon: GitCompareArrows },
     { name: "Procurement",  href: "/procurement",  icon: Truck },
     { name: "Riders",       href: "/riders",       icon: Bike },
     { name: "Customers",    href: "/customers",    icon: HeadphonesIcon },

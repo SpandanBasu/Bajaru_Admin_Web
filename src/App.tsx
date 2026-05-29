@@ -14,6 +14,8 @@ import Customers from "@/pages/customers";
 import Ratings from "@/pages/ratings";
 import Permissions from "@/pages/permissions";
 import Riders from "@/pages/riders";
+import PriceComparison from "@/pages/price-comparison";
+import ProductMapping from "@/pages/product-mapping";
 import SignIn from "@/pages/sign-in";
 import { setLogoutHandler } from "@/lib/api/adminApi";
 
@@ -57,6 +59,8 @@ function Router() {
         <Route path="/" component={Dashboard} />
         <Route path="/orders" component={Orders} />
         <Route path="/products" component={Products} />
+        <Route path="/price-comparison" component={PriceComparison} />
+        <Route path="/product-mapping" component={ProductMapping} />
         <Route path="/procurement" component={Procurement} />
         <Route path="/riders" component={Riders} />
         <Route path="/customers" component={Customers} />

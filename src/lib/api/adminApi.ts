@@ -833,6 +833,88 @@ export async function removeAllowedRider(phoneNumber: string): Promise<void> {
   await adminApi.delete(`/admin/access/riders/${encodeURIComponent(phoneNumber)}`);
 }
 
+// ── Competitor price comparison ─────────────────────────────────────────────────
+
+/** One flattened competitor price line, joined with its Bajaru mapping (if any). */
+export interface CompetitorPriceRow {
+  source: string;
+  pincode: string;
+  competitorName: string;
+  competitorQuantity: string;
+  salePrice: number;
+  mrp: number;
+  scrapedAt: string;
+  bajaruProductId?: string;
+  bajaruProductName?: string;
+}
+
+/** A competitor → Bajaru product mapping. */
+export interface CompetitorMapping {
+  id: string;
+  bajaruProductId: string;
+  bajaruProductName: string;
+  source: string;
+  competitorName: string;
+  competitorQuantity: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A distinct competitor product that has no mapping yet. */
+export interface UnmappedCompetitorProduct {
+  source: string;
+  competitorName: string;
+  competitorQuantity: string;
+  salePrice: number;
+  mrp: number;
+  pincode: string;
+}
+
+export interface CompetitorMappingPayload {
+  bajaruProductId: string;
+  bajaruProductName: string;
+  source: string;
+  competitorName: string;
+  competitorQuantity: string;
+}
+
+/** Latest competitor prices across sources, optionally filtered by pincode. */
+export async function getCompetitorPrices(pincode?: string): Promise<CompetitorPriceRow[]> {
+  const res = await adminApi.get<ApiResponse<CompetitorPriceRow[]>>(
+    "/admin/competitor-pricing/prices",
+    { params: pincode ? { pincode } : {} },
+  );
+  return res.data.data ?? [];
+}
+
+export async function getCompetitorMappings(): Promise<CompetitorMapping[]> {
+  const res = await adminApi.get<ApiResponse<CompetitorMapping[]>>(
+    "/admin/competitor-pricing/mappings",
+  );
+  return res.data.data ?? [];
+}
+
+export async function getUnmappedCompetitorProducts(): Promise<UnmappedCompetitorProduct[]> {
+  const res = await adminApi.get<ApiResponse<UnmappedCompetitorProduct[]>>(
+    "/admin/competitor-pricing/unmapped",
+  );
+  return res.data.data ?? [];
+}
+
+export async function upsertCompetitorMapping(
+  payload: CompetitorMappingPayload,
+): Promise<CompetitorMapping> {
+  const res = await adminApi.post<ApiResponse<CompetitorMapping>>(
+    "/admin/competitor-pricing/mappings",
+    payload,
+  );
+  return res.data.data;
+}
+
+export async function deleteCompetitorMapping(id: string): Promise<void> {
+  await adminApi.delete(`/admin/competitor-pricing/mappings/${encodeURIComponent(id)}`);
+}
+
 export interface MagicLinkResult {
   magicLink: string;  // full deep-link URL: https://riders.bajaru.com/login?token=...
   expiresIn: number;  // seconds (86400 = 24 h)
