@@ -887,6 +887,14 @@ export async function getCompetitorPrices(pincode?: string): Promise<CompetitorP
   return res.data.data ?? [];
 }
 
+/** Distinct pincodes that currently have competitor snapshot data (sorted). */
+export async function getCompetitorPincodes(): Promise<string[]> {
+  const res = await adminApi.get<ApiResponse<string[]>>(
+    "/admin/competitor-pricing/pincodes",
+  );
+  return res.data.data ?? [];
+}
+
 export async function getCompetitorMappings(): Promise<CompetitorMapping[]> {
   const res = await adminApi.get<ApiResponse<CompetitorMapping[]>>(
     "/admin/competitor-pricing/mappings",

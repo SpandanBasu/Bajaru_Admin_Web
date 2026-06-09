@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  TrendingDown, TrendingUp, Link2Off, BarChart3, Warehouse as WarehouseIcon, Search,
+  TrendingDown, TrendingUp, Link2Off, BarChart3, Warehouse as WarehouseIcon, Search, MapPin,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -19,8 +19,12 @@ import {
   getWarehouses,
   getInventoryByWarehouse,
   getCompetitorPrices,
+  getCompetitorPincodes,
   type WarehouseInventoryItem,
 } from "@/lib/api/adminApi";
+
+/** Sentinel value for "show every pincode" in the pincode picker. */
+const ALL_PINCODES = "__all__";
 
 interface ComparisonRow {
   productId: string;
@@ -59,9 +63,25 @@ export default function PriceComparison() {
     staleTime: 60 * 60 * 1000,
   });
 
+  const { data: pincodes = [] } = useQuery({
+    queryKey: ["competitor-pincodes"],
+    queryFn: getCompetitorPincodes,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Default to the first available pincode once they load (per-pincode view).
+  useEffect(() => {
+    if (pincodes.length > 0 && !pincode) {
+      setPincode(pincodes[0]);
+    }
+  }, [pincodes, pincode]);
+
   const { data: competitorPrices = [], isLoading: loadingComp } = useQuery({
     queryKey: ["competitor-prices", pincode],
-    queryFn: () => getCompetitorPrices(pincode || undefined),
+    queryFn: () =>
+      getCompetitorPrices(pincode && pincode !== ALL_PINCODES ? pincode : undefined),
+    // Wait until a pincode is chosen (or none exist) before fetching.
+    enabled: pincodes.length === 0 || !!pincode,
     staleTime: 60_000,
   });
 
@@ -159,12 +179,26 @@ export default function PriceComparison() {
           </SelectContent>
         </Select>
 
-        <Input
-          placeholder="Filter by pincode (optional)"
+        <Select
           value={pincode}
-          onChange={(e) => setPincode(e.target.value)}
-          className="w-52"
-        />
+          onValueChange={setPincode}
+          disabled={pincodes.length === 0}
+        >
+          <SelectTrigger className="w-52">
+            <MapPin className="w-4 h-4 mr-2 text-muted-foreground" />
+            <SelectValue
+              placeholder={pincodes.length === 0 ? "No pincodes yet" : "Select pincode"}
+            />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_PINCODES}>All pincodes</SelectItem>
+            {pincodes.map((pc) => (
+              <SelectItem key={pc} value={pc}>
+                {pc}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
